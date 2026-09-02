@@ -1,7 +1,8 @@
-# Medical Image Segmentation & Tumor Detection
-## Complete Project Documentation — Multimodal AI Track
+# Medical Image Segmentation & Tumor Detection 
 
-> A single combined markdown file containing all 16 documentation chapters for this project (mirrors the 17-file set, minus this cover page's own separate index file).
+For image and flowcharts refer this link - https://github.com/JAGADISHSUNILPEDNEKAR/Medical_Tumor_Segmentation-Tumor_Detection/edit/main/docs/Complete_PRD.md
+
+## Complete Project Documentation — Multimodal AI Track
 
 **Track:** Multimodal AI (Computer Vision)
 **Stack:** Python · PyTorch · FastAPI · SQLite/PostgreSQL · React + Tailwind + react-three-fiber · BraTS
