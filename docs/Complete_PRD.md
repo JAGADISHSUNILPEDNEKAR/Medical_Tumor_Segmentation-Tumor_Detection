@@ -29,6 +29,7 @@ For image and flowcharts refer this link - https://github.com/JAGADISHSUNILPEDNE
 14. [Cost, Roadmap and Team](#14-cost-roadmap-and-team)
 15. [Repository Structure and README](#15-repository-structure-and-readme)
 16. [ADRs, Traceability, Interviews and Score](#16-adrs-traceability-interviews-and-score)
+17. [Feature Prioritization Matrix (MVP / V1 / Stretch / Out)](#17-feature-prioritization-matrix-mvp--v1--stretch--out)
 
 ---
 
@@ -955,3 +956,60 @@ Distributed under the MIT License. See `LICENSE` for details.
 ### ERD
 
 <img width="1197" height="2812" alt="ERD_diagram" src="https://github.com/user-attachments/assets/203ff94e-0a64-4050-a2b1-0d3ef84a1c46" />
+
+---
+
+## 17. Feature Prioritization Matrix (MVP / V1 / Stretch / Out)
+
+This matrix maps every feature under consideration onto four tiers — **MVP** (locked, this is what gets demoed), **V1** (next up, moderate effort, built from data/models already in hand), **Stretch** (real bonus work, high effort, no promises), and **Out** (not on the roadmap) — with the reasoning behind each placement, so scope decisions stay traceable back to the BRD/PRD requirements above.
+
+### MVP — locked, this is what you demo
+
+| Idea | Detailed reason |
+|---|---|
+| BraTS 4-modality ingestion & validation | Every downstream step — preprocessing, inference, evaluation — depends on having all four co-registered modalities (T1, T1ce, T2, FLAIR) with matching shape and orientation. Validating this up front, and naming exactly which modality is missing on failure, is what your own BR-001 requires. Nothing else in the pipeline can run without it. |
+| 3D U-Net training + sliding-window inference | This is the actual research contribution, and the thing your mentor was implicitly dismissing when he called the project "just visualization." Automated, voxel-by-voxel delineation of tumor sub-regions is the real bottleneck your BRD names — manual delineation is slow and inter-observer variable. Everything else in the app exists to display or evaluate the output of this one model. |
+| Dice + HD95 evaluation | Without a correctly implemented metric, you can't prove the model is good — only that it outputs *some* mask. Dice measures overlap, HD95 measures boundary accuracy in real millimeters, and together they're the field-standard reported on BraTS leaderboards. Getting the edge cases right (empty masks, absent classes) is what makes your numbers trustworthy and comparable to published results. |
+| FastAPI async job service | Sliding-window inference on a full 3D volume takes real time (your own target is 1–2 minutes). If it ran inside a single synchronous HTTP request, uploads would time out. Returning a job ID immediately and polling for the result is what makes this a usable app rather than a batch script someone has to babysit. |
+| 2D slice viewer + 3D mesh viewer | This is the "already solved" part from earlier in this conversation — but it's still required. A radiologist or oncologist needs to actually look at the mask against the anatomy, not just trust a Dice number. It's necessary, just not the novel contribution. |
+| Results dashboard + non-clinical-use disclaimer | Both a UX requirement and the ethical/legal guardrail that keeps the whole project honest about what it is — a research prototype, not a diagnostic device. Your own UX doc requires it on every screen that shows a segmentation result. |
+| README / architecture doc / model card / core tests | Your own stated success metric is that a second person can retrain or re-evaluate the model from your configs and README alone, without asking you questions. This documentation is literally how that gets measured — not an optional wrap-up task. |
+
+### V1 — next up, moderate effort, built from data/model you already have
+
+| Idea | Detailed reason |
+|---|---|
+| Tumor volume + sub-region breakdown report | You already have the mask — converting voxel counts to mm³/cm³ per class is arithmetic, not new modeling. It turns a bare metrics table into something that reads like a real report, and it's already a "Should Have" in your own PRD. |
+| Plain-English findings summary | A templated line like "enhancing tumor volume: X cm³, largest sub-region: Y" makes your numbers readable to a non-ML person at a glance. Zero new science, but it changes how finished the results screen feels. |
+| Tumor location report (side, distance from midline) | An honest, buildable answer to "where" — computed geometrically from the mask's centroid relative to the brain's midline, no new data or model needed. Directly answers part of what your mentor wanted, without pretending to predict future spread. |
+| Slice-by-slice accuracy map | Instead of one aggregate Dice score per case, compute and chart it per slice. Reuses your existing evaluation code at finer granularity, and immediately shows *where* the model struggles — usually near tumor edges — instead of hiding that inside a single number. |
+| Shape/texture stats (radiomics) | Standard quantitative-imaging measurements — sphericity, surface-to-volume ratio, texture entropy — computed straight from the mask. Established methodology, adds visible technical depth, needs no new data collection. |
+| PDF export of report | Packaging your existing dashboard output into a shareable file. Pure engineering, not new science, but it makes the deliverable demo-able outside the live app. |
+| Case history screen + basic auth | Already scoped as V1 in your own PRD — lets a user see past cases and stops one session from browsing another's data by guessing IDs. Becomes necessary once you have more than one demo case. |
+| Polished aggregate dashboard | Also already V1 in your PRD — Dice/HD95 distributions and per-class breakdowns across all evaluated cases, not just one at a time. Worth building once you've run enough cases to have a real distribution to show. |
+| Multi-model ensembling | Your own ADR-001 explicitly named full ensembling as something you chose to skip for MVP due to time. Doing it now closes a gap you already documented, and typically produces a measurable Dice/HD95 improvement you can show as a concrete before/after number — real evidence, not just a claim. |
+| Uncertainty quantification + calibration | Running inference with randomness on (Monte Carlo dropout) and checking whether the model's stated confidence actually matches its real accuracy is a genuinely active question in medical AI. It answers "how much should a radiologist trust this," which is a more sophisticated contribution than adding another prediction. |
+
+### Stretch — real bonus, high effort, no promises
+
+| Idea | Detailed reason |
+|---|---|
+| Survival prediction (age + resection + mask shape) | BraTS has run an official Overall Survival task since 2017 using each patient's age, resection status, and survival days alongside the images — so unlike raw genomics, this is real BraTS-provided data, *if* your specific release includes that metadata (confirm before promising it). Hard because of missing values and feature engineering. Frame it honestly: published work found that for fully-resected patients, none of the tested imaging approaches beat a simple age-only guess — reporting that finding for your own attempt is more credible than claiming to have solved prognosis. |
+| Cross-scanner / domain-shift robustness testing | BraTS pools data from multiple institutions and scanners. Splitting your test set by site (or a proxy like intensity statistics) and checking whether Dice holds up across groups answers a real deployment question — will this still work in a hospital it wasn't trained on — that almost no student project checks, precisely because doing the grouping and statistics properly takes real effort. |
+| Self-supervised pretraining | Train the model first on an unlabeled "fill in the blanks" task (reconstruct a masked-out patch), then fine-tune on your labeled segmentation data. Targets one of the most-cited real bottlenecks in medical AI — scarce labeled data — but it's a genuinely separate training stage with its own tuning, which is why it's stretch, not V1. |
+| Model comparison / versioning UI | Already a "Could Have" in your own PRD — a screen to compare two checkpoints side by side. Only useful once you actually have two checkpoints worth comparing, so it naturally depends on ensembling or other stretch work being done first. |
+| "Why did it say this" saliency overlay | A heatmap showing which input regions most influenced the model's decision. Genuinely useful for building a radiologist's trust, moderate effort, but it's an add-on to the model you already have rather than a new prediction task. |
+| WHO grade classification (HGG/LGG) | The closest honest version of "type/stage" — a lightweight classification head predicting high-grade vs low-grade glioma from the same 4-modality input. Feasible only if your specific BraTS release includes grade labels for your training cases — check before promising it. |
+| MGMT / radiogenomics classification head | BraTS 2021 ran this as an official second task, so it's a recognized research direction, not a fantasy. But be upfront: a rigorous external validation study found roughly 80% of published MGMT-prediction models performed no better than chance once tested outside their original dataset. Treat this as a genuine open research attempt, not a promised feature. |
+| Growth-tracking scaffold across timepoints | Already in your original PRD's Future Scope, explicitly with the caveat that it must never be presented as a validated clinical tool. It needs longitudinal scans of the same patient, which BraTS mostly doesn't provide — so at most this becomes a UI/data-model scaffold, not a working prediction. |
+
+### Out — not on the roadmap
+
+| Idea | Detailed reason |
+|---|---|
+| True genomic sequencing analysis | Needs actual DNA/tissue sequencing data — a completely different modality from MRI. Your project, built entirely on BraTS imaging, has no source for this at all. This isn't a matter of effort; the dataset simply doesn't contain it. |
+| Symptom-based diagnosis ("headache → X") | Requires paired symptom-to-outcome data you have no practical or ethical way to gather in a course project, and it turns your tool into something that looks like it's diagnosing from symptoms — the exact thing your own non-clinical-use disclaimer exists to rule out. It would undermine the credibility of everything else you built responsibly. |
+| Cancer "staging" as literally asked | Brain tumors aren't staged with TNM, the system used for most other cancers — they're graded with the WHO CNS system (grades 1–4), which increasingly depends on molecular markers determined from surgical tissue, not imaging. Your project has no access to that pathology data, so staging as described isn't achievable; the WHO-grade stretch goal above is the closest honest substitute. |
+| Growth/spread prediction as a real validated feature | Predicting how a tumor will spread requires multiple scans of the same patient taken months apart — not how BraTS is structured. Only the caveated, explicitly-non-validated scaffold is fair game; presenting an actual spread prediction as validated would be an overclaim your own PRD is built to avoid. |
+| DICOM/PACS/EHR integration, multi-tenant auth, regulatory artifacts | Explicitly placed out of scope in your original PRD's MVP boundary from day one — these belong to a production clinical deployment, not a 3-month research prototype, and would consume time better spent on the model itself. |
+| Full official nnU-Net framework dependency | Your own ADR-001 already made this call — the official framework would satisfy "have a working segmenter" but not the actual learning objective of implementing the architecture and training loop yourself, and its automatic config search doesn't fit a 3-month solo timeline. You keep nnU-Net's ideas, not its code. |
