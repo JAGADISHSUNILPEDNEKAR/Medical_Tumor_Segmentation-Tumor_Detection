@@ -30,6 +30,7 @@ For image and flowcharts refer this link - https://github.com/JAGADISHSUNILPEDNE
 15. [Repository Structure and README](#15-repository-structure-and-readme)
 16. [ADRs, Traceability, Interviews and Score](#16-adrs-traceability-interviews-and-score)
 17. [Feature Prioritization Matrix (MVP / V1 / Stretch / Out)](#17-feature-prioritization-matrix-mvp--v1--stretch--out)
+18. [Research Addendum (September 2026) — Model & Pretrained-Asset Survey, Report Generation, and RAG Extensions](#18-research-addendum-september-2026--model--pretrained-asset-survey-report-generation-and-rag-extensions)
 
 ---
 
@@ -1013,3 +1014,96 @@ This matrix maps every feature under consideration onto four tiers — **MVP** (
 | Growth/spread prediction as a real validated feature | Predicting how a tumor will spread requires multiple scans of the same patient taken months apart — not how BraTS is structured. Only the caveated, explicitly-non-validated scaffold is fair game; presenting an actual spread prediction as validated would be an overclaim your own PRD is built to avoid. |
 | DICOM/PACS/EHR integration, multi-tenant auth, regulatory artifacts | Explicitly placed out of scope in your original PRD's MVP boundary from day one — these belong to a production clinical deployment, not a 3-month research prototype, and would consume time better spent on the model itself. |
 | Full official nnU-Net framework dependency | Your own ADR-001 already made this call — the official framework would satisfy "have a working segmenter" but not the actual learning objective of implementing the architecture and training loop yourself, and its automatic config search doesn't fit a 3-month solo timeline. You keep nnU-Net's ideas, not its code. |
+
+---
+
+## 18. Research Addendum (September 2026) — Model & Pretrained-Asset Survey, Report Generation, and RAG Extensions
+
+> Answers the open research questions that came up after the mentor review: which pretrained models exist, whether combining models is a viable paper angle, whether brain-MRI report generation has already been solved, how to extract image features, where radiogenomics stands, and whether a CNN+RAG report pipeline exists anywhere. Written to slot in after §17 without renumbering the rest of the document.
+
+### 18.1 Model Landscape: 2D Classification Backbones vs. 3D Segmentation Backbones
+
+Two different jobs get bundled together when people list "VGG16, VGG19, ResNet50, MobileNet, EfficientNet, 3D-Net" in one breath:
+
+- **VGG16 / VGG19 / ResNet50 / MobileNet / EfficientNet** are 2D ImageNet-style CNNs. In the brain-tumor literature they are used almost entirely as transfer-learning backbones for **2D slice-level classification** — sorting a single MRI slice into glioma / meningioma / pituitary / no-tumor, not producing a voxel-wise 3D mask. This is one of the most heavily published sub-areas in medical imaging right now — several 2025 papers run head-to-head comparisons of exactly this backbone set on the same public Kaggle-style 4-class dataset, with reported accuracies ranging from the mid-80s to over 99% depending on preprocessing and split, and no single architecture winning consistently across studies (VGG16 comes out on top in one 2025 comparison, ResNet50 in another, Xception/EfficientNetV2 in a third).
+- **3D U-Net / nnU-Net / MedNeXt / Swin UNETR / SegResNet** are the family actually used for BraTS-style **volumetric segmentation** — the job your PRD's MVP is built around. This is a separate model lineage from the VGG/ResNet/EfficientNet group above.
+
+**Where this leaves your project:** your BRD/PRD already made the right call — a 3D U-Net/nnU-Net-inspired network is correctly the core engine, and VGG16/19, ResNet50, MobileNet, and EfficientNet aren't substitutes for it. They're candidates for a *secondary* screening/triage classifier (tumor-present/absent, or grade classification on a 2D slice) or as feature extractors — not for the segmentation task itself.
+
+### 18.2 Pretrained Models You Can Actually Reuse
+
+Yes — several exist and are downloadable now, though license terms vary case by case:
+
+- **MONAI Model Zoo — `brats_mri_segmentation`**: a SegResNet (Myronenko, 2018) bundle pretrained on BraTS, installable with `python -m monai.bundle download "brats_mri_segmentation"`. Apache-2.0 licensed. This is the closest drop-in match to your TRD's stack (PyTorch, 4-modality NIfTI input) and a reasonable initialization point rather than training from scratch.
+- **nnU-Net v2 checkpoints from the 2025/2026 BraTS-family challenges** (BraTS-METS, BraTS-Africa, BraTS-PED, BraTS Lighthouse) are being published on Hugging Face by individual challenge teams — e.g. an nnU-Net v2 residual-encoder checkpoint for brain-metastasis segmentation, and topology-refined nnU-Net/MedNeXt fusion checkpoints for the Africa track. Useful as architecture/config references even where the weights are tumor-type-specific (metastases vs. glioma) and would need fine-tuning on BraTS glioma data.
+- **MedicalNet / Med3D**: a set of 3D-ResNet checkpoints (depths 10/18/34…) pretrained across 23 public 3D medical datasets (MRI + CT, multiple organs) — the closest equivalent to "ImageNet pretraining" for 3D medical volumes in general, MIT-licensed. Useful if you want a pretrained 3D encoder to initialize a custom architecture instead of training 3D convolutions from random weights.
+- **Caution on licensing:** not everything is freely reusable. One 2026 BraTS-METS submission embeds a "BrainIAC" foundation-model backbone under a research-only license that explicitly excludes clinical/commercial use. Check the license attached to any checkpoint you pull in, not just the paper it came from.
+
+### 18.3 Is "Combine Models to Improve Accuracy" a Viable Paper?
+
+Partially — you'd be arriving in good company, which cuts both ways. Ensembling nnU-Net + MedNeXt + Swin UNETR (often with a topology-refinement or GAN-based synthetic-lesion augmentation step) is *literally the winning pattern* in the 2025 BraTS-family challenges right now: a topology-driven nnU-Net/MedNeXt fusion won on the BraTS-Africa track, a frequency-aware nnU-Net/Swin-UNETR/HFF-Net ensemble was used for BraTS-PED 2025, and an on-the-fly GAN-augmented three-model nnU-Net ensemble placed first on the BraTS Lighthouse 2025 adult-glioma task. That means "combine several segmentation models to raise Dice/HD95" is well-trodden ground — a paper that only does that, on the standard BraTS split, will read as incremental.
+
+Two ways to sharpen it for a 3-month solo/duo project:
+1. **Reframe around your actual constraint.** Most of those winning ensembles assume multi-GPU, multi-day training budgets. A paper framed as "how much of the ensembling accuracy gain survives under a single-GPU, ~1–2-minute-per-case inference budget" (your own TRD's stated NFR) is a narrower, more original question than "we also tried ensembling."
+2. **Pair it with the report-generation angle below.** "Ensemble when accuracy matters, single lightweight model when speed matters, route to whichever the deployment context needs" is a more publishable systems contribution than an accuracy table alone.
+
+### 18.4 Has Anyone Already Solved Report Generation for Brain MRI?
+
+Yes, partially — this isn't unclaimed territory, but it's also not fully solved for your specific case (quantitative BraTS tumor sub-regions).
+
+- **AutoRG-Brain** (2024, extended into an IEEE journal article in 2025/2026) is presented by its authors as the first brain-MRI report-generation system pairing automatic anomaly/structure segmentation with a visual-prompting language model to produce structured, region-grounded findings. They also released a supporting benchmark, RadGenome-Brain MRI (roughly 3,400 scans with paired segmentation masks and reports), and describe trialling the system in real clinical workflows, where junior doctors used its generated findings and masks as a starting draft. This is the closest existing system to what you're picturing — but it targets general brain-MRI findings across many disease types, not BraTS-style tumor sub-region Dice/HD95/volume reporting specifically.
+- **A 2024 fine-tune of LLaVA-Med 1.5 on the RHUH-GBM glioblastoma dataset** targets your exact use case — generating brain-tumor MRI reports — but at conference-paper scale: one dataset, RLHF fine-tuning, no BraTS-style quantitative sub-region grounding baked into the output.
+- **MediVLM** (EMNLP 2025 Findings) generates a report plus a severity score from medical images generally, again not tumor-segmentation-specific.
+
+**The gap that's still open:** none of these bakes your project's own Dice/HD95/volumetric sub-region numbers directly into the generated narrative — they generate free-text findings from the image, not a report provably grounded in the same quantitative metrics your Results Dashboard already computes. That's a legitimate, narrow, buildable contribution — not a "first ever" claim, but a real gap.
+
+### 18.5 Extracting Features from the Image — Two Established Routes
+
+- **Handcrafted radiomics via PyRadiomics** (IBSI-compliant, actively maintained): given your predicted mask, it computes on the order of 1,000–1,900 quantitative features per case — shape descriptors (sphericity, surface-to-volume ratio), first-order intensity statistics, and texture features (GLCM, GLRLM, GLSZM, NGTDM, GLDM). This is already a "Should Have" in your own PRD (radiomics/shape-texture stats, V1 tier) — nothing new to design, just wire in the library.
+- **Deep/CNN feature embeddings**: the activations from your trained 3D U-Net's encoder bottleneck (or a pretrained classifier's penultimate layer) can be used directly as a compact feature vector per case. This is the representation you'd want for similarity search (§18.8), not for radiomics-style interpretable features.
+- **A working precedent for the combined pipeline** is I3CR-WANO (Chakrabarty et al.), an end-to-end framework that classifies MRI sequence type, segments tumor subtypes with a CNN, and automatically extracts PyRadiomics features — validated on 414 patient cases across two institutions, with an "expert-in-the-loop" step letting radiologists correct the segmentation before features are extracted. Structurally, that's very close to what your own V1 tier already plans.
+
+### 18.6 "Cancerous vs. Non-Cancerous" and Genomics of the Cell (Radiogenomics)
+
+Two different things worth separating:
+
+- **Cancerous vs. non-cancerous / tumor-type classification** is what §18.1's 2D classifiers (or a simple presence/absence head on your segmentation output) already handle — well established, comparatively low-risk.
+- **Predicting genomic markers from the image** (MGMT promoter methylation, IDH mutation status, 1p/19q co-deletion, H3 K27M) — inferring "genomics of the cell" without a biopsy — is real, active research, not science fiction: recent 2025–2026 work pairs a U-Net segmentation front end with a radiomics or 3D-CNN classifier on the masked region to predict MGMT status, and comparable pipelines exist for IDH and pediatric H3 K27M status. **But** this area has a well-documented reliability problem that your own PRD's Stretch tier already flags: the RSNA-MICCAI 2021 external-validation study found that when MGMT-prediction models were tested on a larger, multi-center dataset, roughly 80% performed no better than chance. That's not a reason to avoid the topic — it's a reason to report it exactly the way your Stretch-tier language already does: as a genuine, honestly-caveated research attempt, never as a validated diagnostic claim.
+
+### 18.7 "Reference Case → New Image → Doctor Verifies" Workflow
+
+This pattern — take a known case's image and report, use it as a reference, generate a draft for a new image, then have a radiologist verify — isn't unprecedented; it's essentially the deployment pattern both AutoRG-Brain and I3CR-WANO already use: the model produces a grounded draft (segmentation + findings, or segmentation + radiomics), and a clinician edits or signs off before anything is treated as final. The genuinely novel part of your version is *how the reference case gets selected* — which is exactly retrieval-augmented generation, below.
+
+### 18.8 CNN + RAG for Medical Image Report Generation
+
+Yes, this exists as an active 2025/2026 research direction — but it's concentrated almost entirely on **chest X-ray** (MIMIC-CXR), not brain tumor MRI. The common architecture across several recent papers (LaB-RAG; RA-RRG; a 2026 grounded multimodal retrieval-augmented drafting system; RAD-SRAC; an earlier GPT-based CXR-ReDonE pipeline) is:
+
+1. Encode the query image with a contrastive image-text encoder (e.g. BioViL-T, GLoRIA, or a domain-adapted CLIP-style model).
+2. Retrieve the most similar prior case(s) from a vector database of previously processed images and their reports (FAISS is the common similarity-search library).
+3. Feed the retrieved case(s)' report text to an LLM as grounding / in-context examples, so the draft is anchored in real prior language instead of freely generated.
+4. Some systems add citation-constrained generation or a confidence-based refusal step, specifically to catch cases where the retrieved neighbor is anatomically similar but clinically different.
+5. A clinician reviews and signs off — RAG is explicitly framed in this literature as a way to reduce hallucination and keep the system auditable, not as a way to remove the human step.
+
+**What no published system appears to do yet:** apply this retrieval-augmented pattern to BraTS-style 3D brain-tumor segmentation with quantitative sub-region grounding. That's a real, credible gap — and one your project is already halfway built for. Your planned Case History screen, Checkpoint Registry, and Results Dashboard (all already in your V1 tier) are effectively the retrieval corpus this pattern needs. You'd mainly be adding (a) an embedding step over your 3D U-Net's encoder features or a case-level radiomics vector, (b) a similarity-search index over past cases, and (c) an LLM drafting step grounded in the retrieved case's Dice/HD95/volume numbers alongside the new case's own numbers — gated by radiologist sign-off before anything is stored as final.
+
+### 18.9 Suggested Positioning for the Paper
+
+Given that (a) 2D-backbone classification comparisons and (b) plain multi-model segmentation ensembling are both saturated in the 2025/2026 literature, the least-crowded, most buildable angle for a 1–2-person, 3-month project is a **narrow systems contribution**, not a new architecture:
+
+> *"Case-retrieval-augmented, quantitatively-grounded report drafting for BraTS tumor sub-region segmentation, with radiologist-in-the-loop verification."*
+
+This composes almost entirely from pieces your PRD already scopes for V1 (tumor volume/breakdown report, plain-English findings summary, case history, checkpoint registry) plus one new component (case embedding + similarity retrieval + LLM drafting), evaluated on two axes: your existing Dice/HD95 segmentation metrics, and report-quality metrics borrowed from the retrieval-augmented report-generation literature (factual consistency against the retrieved case, radiologist edit-distance on the draft). That gives you a publishable, honestly-scoped paper without requiring genomics-level clinical claims or a multi-GPU ensembling budget you don't have.
+
+### 18.10 Sources
+
+- MONAI Model Zoo `brats_mri_segmentation` bundle — https://huggingface.co/ilex-hub/brats_segresnet.1 · https://github.com/Project-MONAI/model-zoo
+- nnU-Net v2 BraTS-METS / Africa / PED checkpoints — https://huggingface.co/NicoloPecco/nnUNet_BraTS_Metastases · https://arxiv.org/pdf/2604.15964 · https://arxiv.org/pdf/2509.19353 · https://arxiv.org/pdf/2509.24973
+- Med3D / MedicalNet — https://arxiv.org/pdf/1904.00625 · https://huggingface.co/TencentMedicalNet/MedicalNet-Resnet18
+- 2D backbone comparisons on brain-tumor MRI — https://www.researchgate.net/publication/389752044 · https://sistemasi.ftik.unisi.ac.id/index.php/stmsi/article/view/5054 · https://link.springer.com/article/10.1007/s42044-024-00216-6
+- AutoRG-Brain / RadGenome-Brain MRI — https://arxiv.org/abs/2407.16684 · https://github.com/ljy19970415/AutoRG-Brain
+- LLaVA-Med 1.5 brain-tumor MRI report fine-tune — https://ken.ieice.org/ken/paper/20241205mc6e/
+- MediVLM — https://preview.aclanthology.org/dashboard/2025.findings-emnlp.544
+- PyRadiomics — https://pyradiomics.readthedocs.io/
+- I3CR-WANO — https://arxiv.org/abs/2210.03151
+- MGMT / radiogenomics — https://pmc.ncbi.nlm.nih.gov/articles/PMC12653240/ · https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9562637/ (RSNA-MICCAI 2021 external validation)
+- RAG for radiology report generation — https://arxiv.org/html/2411.16523v1 (LaB-RAG) · https://arxiv.org/html/2504.07415v2 (RA-RRG) · https://arxiv.org/html/2603.17765 (grounded multimodal RAG) · https://openreview.net/pdf?id=3wDc1iItAu (RAD-SRAC)
