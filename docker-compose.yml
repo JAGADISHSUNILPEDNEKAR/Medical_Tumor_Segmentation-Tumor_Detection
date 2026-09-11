@@ -1,0 +1,27 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      MODEL_PATH: ""
+      MODEL_VERSION: ""
+      UPLOAD_DIR: /data/uploads
+      RESULTS_DIR: /data/results
+      MAX_UPLOAD_SIZE_MB: "500"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: ""
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
