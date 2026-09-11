@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-paper-50 text-ink-900 antialiased;
+}
+
+:focus-visible {
+  @apply outline outline-2 outline-offset-2 outline-accent-700;
+}
