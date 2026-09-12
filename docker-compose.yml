@@ -13,7 +13,10 @@ services:
       MODEL_VERSION: ""
       UPLOAD_DIR: /data/uploads
       RESULTS_DIR: /data/results
+      DATABASE_URL: sqlite:////data/app.db
       MAX_UPLOAD_SIZE_MB: "500"
+    volumes:
+      - app-data:/data
 
   frontend:
     build:
@@ -25,3 +28,6 @@ services:
       - "3000:80"
     depends_on:
       - backend
+
+volumes:
+  app-data:
