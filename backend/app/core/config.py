@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     upload_dir: str = "./data/uploads"
     results_dir: str = "./data/results"
     max_upload_size_mb: int = 500
+    database_url: str = "sqlite:///./data/app.db"
 
     @property
     def cors_origin_list(self) -> list[str]:
