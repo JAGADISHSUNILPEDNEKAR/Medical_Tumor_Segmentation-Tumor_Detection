@@ -19,11 +19,18 @@ REQUEST_ID_HEADER = "X-Request-ID"
 class AppError(Exception):
     """Safe, client-facing application error."""
 
-    def __init__(self, error: str, detail: str, status_code: int = 400) -> None:
+    def __init__(
+        self,
+        error: str,
+        detail: str,
+        status_code: int = 400,
+        case_id: str | None = None,
+    ) -> None:
         super().__init__(detail)
         self.error = error
         self.detail = detail
         self.status_code = status_code
+        self.case_id = case_id
 
 
 def _request_id(request: Request) -> str:
@@ -37,10 +44,18 @@ def register_exception_handlers(app: FastAPI) -> None:
         request_id = getattr(request.state, "request_id", None) or _request_id(request)
         logger.warning(
             "application_error",
-            extra={"error": exc.error, "status_code": exc.status_code},
+    extra={"error": exc.error, "status_code": exc.status_code},
         )
-        body = APIError(error=exc.error, detail=exc.detail, request_id=request_id)
-        return JSONResponse(status_code=exc.status_code, content=body.model_dump())
+        body = APIError(
+            error=exc.error,
+            detail=exc.detail,
+            request_id=request_id,
+            case_id=exc.case_id,
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=body.model_dump(exclude_none=True),
+        )
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_exception(request: Request, exc: StarletteHTTPException) -> JSONResponse:
