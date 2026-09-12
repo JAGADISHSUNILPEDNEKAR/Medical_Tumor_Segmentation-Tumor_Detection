@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 
 import { fetchHealth, fetchModelInfo } from "../lib/api";
@@ -58,10 +59,9 @@ export function HomePage() {
           Inspectable brain tumor sub-region segmentation for research review
         </h1>
         <p className="mt-4 text-lg leading-relaxed text-ink-700">
-          Upload a four-modality BraTS MRI case, run segmentation through a
-          versioned inference service, and review 2D slices, a 3D mesh, and
-          quantitative metrics. The trained model is developed separately and
-          is not loaded in this Phase 1 shell.
+          Upload a four-modality BraTS MRI case, then inspect validation before
+          any future inference step. The trained model is developed separately
+          and is not loaded.
         </p>
       </section>
 
@@ -84,21 +84,18 @@ export function HomePage() {
       <section className="mt-10 border border-ink-900/10 bg-white p-6">
         <h2 className="font-display text-2xl text-ink-950">Case upload</h2>
         <p className="mt-2 max-w-2xl text-ink-700">
-          Four-modality NIfTI upload (T1, T1ce, T2, FLAIR) is implemented in
-          Phase 2. This screen does not accept files and does not run
-          inference.
+          Assign T1, T1ce, T2, and FLAIR NIfTI volumes to explicit modality
+          slots. Optional ground-truth <code>seg</code> is stored for later
+          evaluation and is not scored in this phase.
         </p>
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          className="mt-5 cursor-not-allowed border border-ink-900/20 bg-paper-100 px-4 py-2 text-sm font-medium text-ink-500"
+        <Link
+          to="/upload"
+          className="mt-5 inline-block border border-accent-700 bg-accent-700 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600"
         >
           Upload a case
-        </button>
+        </Link>
         <p className="mt-2 text-sm text-ink-500">
-          Next action after Phase 2: validate modalities, create a case, then
-          queue inference.
+          Next action: validate four modalities. Inference remains unavailable.
         </p>
       </section>
     </div>

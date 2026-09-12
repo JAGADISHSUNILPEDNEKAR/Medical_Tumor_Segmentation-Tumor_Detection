@@ -1,9 +1,10 @@
+import { NavLink, Outlet } from "react-router-dom";
 import type { ReactNode } from "react";
 
 import { DisclaimerBanner } from "./DisclaimerBanner";
 
 interface LayoutProps {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
@@ -17,7 +18,7 @@ export function Layout({ children }: LayoutProps) {
       </a>
       <DisclaimerBanner />
       <header className="border-b border-ink-900/10 bg-white">
-        <div className="mx-auto flex max-w-6xl items-baseline justify-between gap-4 px-4 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent-700">
               Multimodal MRI research
@@ -26,16 +27,33 @@ export function Layout({ children }: LayoutProps) {
               Tumor Segmentation Workbench
             </p>
           </div>
-          <p className="hidden text-sm text-ink-500 sm:block">Phase 1 foundation</p>
+          <nav aria-label="Primary" className="flex items-center gap-4 text-sm">
+            <NavLink
+              to="/"
+              className={({ isActive }) =>
+                isActive ? "font-semibold text-ink-950" : "text-ink-500 hover:text-ink-950"
+              }
+            >
+              Home
+            </NavLink>
+            <NavLink
+              to="/upload"
+              className={({ isActive }) =>
+                isActive ? "font-semibold text-ink-950" : "text-ink-500 hover:text-ink-950"
+              }
+            >
+              Upload MRI
+            </NavLink>
+          </nav>
         </div>
       </header>
       <main id="main-content" className="flex-1">
-        {children}
+        {children ?? <Outlet />}
       </main>
       <footer className="border-t border-ink-900/10 bg-white px-4 py-4 text-sm text-ink-500">
         <p className="mx-auto max-w-6xl">
           BraTS-format T1, T1ce, T2, and FLAIR research workflow. Public
-          de-identified research data only.
+          de-identified research data only. Not a diagnostic device.
         </p>
       </footer>
     </div>
