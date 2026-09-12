@@ -1,0 +1,46 @@
+"""Case and NIfTI validation constants.
+
+HARD failures reject the upload/case.
+WARNINGS are recorded and returned but do not block READY.
+"""
+
+from enum import StrEnum
+
+REQUIRED_MODALITIES: tuple[str, ...] = ("t1", "t1ce", "t2", "flair")
+OPTIONAL_MODALITIES: tuple[str, ...] = ("seg",)
+ALL_MODALITIES: tuple[str, ...] = REQUIRED_MODALITIES + OPTIONAL_MODALITIES
+
+# Raw BraTS dataset labels. Do not remap 3 → 4 at upload time.
+BRATS_SEG_LABELS: frozenset[int] = frozenset({0, 1, 2, 4})
+
+ALLOWED_NIFTI_EXTENSIONS: tuple[str, ...] = (".nii", ".nii.gz")
+
+AFFINE_RTOL = 1e-5
+AFFINE_ATOL = 1e-4
+SPACING_RTOL = 1e-5
+SPACING_ATOL = 1e-4
+
+
+class CaseStatus(StrEnum):
+    CREATED = "CREATED"
+    UPLOADING = "UPLOADING"
+    VALIDATING = "VALIDATING"
+    READY = "READY"
+    FAILED = "FAILED"
+
+
+class ErrorCode(StrEnum):
+    CASE_NOT_FOUND = "CASE_NOT_FOUND"
+    MISSING_MODALITY = "MISSING_MODALITY"
+    DUPLICATE_MODALITY = "DUPLICATE_MODALITY"
+    INVALID_EXTENSION = "INVALID_EXTENSION"
+    INVALID_NIFTI = "INVALID_NIFTI"
+    INVALID_DIMENSION = "INVALID_DIMENSION"
+    SHAPE_MISMATCH = "SHAPE_MISMATCH"
+    AFFINE_MISMATCH = "AFFINE_MISMATCH"
+    SPACING_MISMATCH = "SPACING_MISMATCH"
+    INVALID_SEGMENTATION_LABEL = "INVALID_SEGMENTATION_LABEL"
+    CASE_TOO_LARGE = "CASE_TOO_LARGE"
+    STORAGE_ERROR = "STORAGE_ERROR"
+    INVALID_MODALITY = "INVALID_MODALITY"
+    CASE_NOT_MUTABLE = "CASE_NOT_MUTABLE"
