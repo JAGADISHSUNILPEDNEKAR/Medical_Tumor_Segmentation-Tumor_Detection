@@ -1,51 +1,58 @@
-# Architecture — Phase 1
+# Architecture — Phase 2
 
 Research / decision-support prototype. **Not a diagnostic device. Not clinically validated.**
 
 ## Boundary
 
-The production application serves cases, visualization, and reports. Training stays in a separate notebook/research pipeline. This repository's web stack must not train models.
+Training stays in a separate notebook. This application validates and stores BraTS NIfTI cases. It does **not** run inference in Phase 2.
 
 ```mermaid
 flowchart LR
     User[User] --> FE[React SPA]
     FE -->|REST /api/v1| BE[FastAPI]
+    BE --> Cases[CaseService]
+    Cases --> Val[NIfTI validation]
+    Cases --> Store[Isolated filesystem]
+    Cases --> DB[(SQLite metadata)]
     BE --> Inf[InferenceService protocol]
-    Inf -.-> Mock[MockInferenceService later]
-    Inf -.-> Real[RealBraTSInferenceService later]
+    Inf -.-> Mock[Phase 3 mock]
 ```
 
-Phase 1 implements the left side only: frontend shell, FastAPI process, configuration, health, and the `InferenceService` interface. No upload, jobs, mock predictions, or checkpoint loading.
+## Public API
 
-## Runtime (Phase 1)
+PRD ingest endpoints remain:
 
-```mermaid
-flowchart TB
-    Browser[Browser :3000]
-    Browser -->|dev proxy or nginx /api| API[FastAPI :8000]
-    API --> Health["GET /api/v1/health"]
-    API --> Info["GET /api/v1/model/info"]
-    Health --> Status["model_loaded: false\ninference_source: unavailable"]
-```
+- `POST /api/v1/predict` — four modalities; validates and stores
+- `POST /api/v1/evaluate` — four modalities plus `seg`; validates and stores
 
-## Replaceable inference
+Phase 2 **does not** return `202` with a `job_id`. That would imply a queued inference job. These endpoints return **201** with `job_id: null`, `status: READY`, and `inference: not_started`.
 
-`backend/app/inference/base.py` defines:
+Upload UX needs per-file progress, so these case endpoints are **additive** (not a competing product API):
+
+- `POST /api/v1/cases`
+- `POST /api/v1/cases/{case_id}/files/{modality}`
+- `POST /api/v1/cases/{case_id}/complete`
+- `GET /api/v1/cases/{case_id}`
+
+## Case states
+
+`CREATED` → `UPLOADING` → `VALIDATING` → `READY` or `FAILED`
+
+Job states (`queued` / `running` / `done`) are not used yet.
+
+## Storage
 
 ```text
-InferenceService.predict(case) -> result
+{UPLOAD_DIR}/cases/{case-uuid}/input/{modality}.nii[.gz]
+{UPLOAD_DIR}/cases/{case-uuid}/metadata/case.json
 ```
 
-The frontend never knows whether a future result came from a mock, local PyTorch, or a remote GPU server. Phase 1 does not register an implementation.
+Original filenames are never used as filesystem paths. Files are not served by the frontend origin.
 
-## Configuration
+## Validation
 
-All paths and origins come from environment variables (`pydantic-settings`). `MODEL_PATH` is reserved for Phase 6. Setting it in Phase 1 does **not** load weights and does **not** change `model_loaded`.
+**Hard failure:** unreadable NIfTI, not 3D, non-finite affine/spacing/voxels, missing required modality, duplicate modality, shape/affine/spacing mismatch, `seg` labels outside `{0,1,2,4}`, case over `MAX_UPLOAD_SIZE_MB`.
 
-## What is intentionally absent
+**Warning only:** all-zero volume; qform/sform disagreement.
 
-- MRI upload and NIfTI validation
-- SQLite / PostgreSQL
-- Job queue and mock segmentation
-- 2D/3D viewers and reports
-- `ml/` training code
+No resampling. Label `3` is not rewritten to `4`.

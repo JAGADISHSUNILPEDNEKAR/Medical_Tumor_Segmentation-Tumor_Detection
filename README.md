@@ -4,7 +4,7 @@ Research / decision-support prototype for BraTS-format brain MRI tumor sub-regio
 
 **This is not a medical device. It is not clinically validated. It must not be used for diagnosis or treatment decisions.**
 
-The trained 3D U-Net is developed in a separate notebook. This repository currently contains **Phase 1**: a FastAPI foundation and a React application shell that can reach the API. No MRI upload, inference, or medical predictions are implemented yet.
+The trained 3D U-Net is developed in a separate notebook. This repository currently contains **Phase 2**: API health, case creation, four-modality NIfTI upload, spatial validation, and isolated storage. Inference is not started.
 
 ## Current status
 
@@ -13,8 +13,8 @@ The trained 3D U-Net is developed in a separate notebook. This repository curren
 | Frontend shell | Phase 1 |
 | Backend health | Phase 1 |
 | Model info stub | Phase 1 (`model_loaded: false`, no headline metrics) |
-| Case upload | Not in Phase 1 |
-| Mock or real inference | Not in Phase 1 |
+| Case upload + NIfTI validation | Phase 2 |
+| Mock or real inference | Not implemented |
 
 ## Requirements
 
@@ -34,8 +34,9 @@ Copy `.env.example` to `.env` and adjust if needed. Do not commit secrets.
 | `VITE_API_URL` | Browser API origin. Empty = same-origin / Vite proxy |
 | `MODEL_PATH` | Reserved. Unused until a real checkpoint is integrated |
 | `MODEL_VERSION` | Reserved |
-| `UPLOAD_DIR` / `RESULTS_DIR` | Reserved for later phases |
-| `MAX_UPLOAD_SIZE_MB` | Reserved for later phases |
+| `UPLOAD_DIR` / `RESULTS_DIR` | Isolated case files (not web-served) |
+| `DATABASE_URL` | SQLite URL for case metadata |
+| `MAX_UPLOAD_SIZE_MB` | Limit for the **entire case** (sum of files), default 500 |
 
 ## Backend
 
@@ -50,7 +51,9 @@ uvicorn app.main:app --reload --port 8000
 - API: http://localhost:8000
 - OpenAPI: http://localhost:8000/docs
 - Health: `GET /api/v1/health` → `{ "status": "ok", "model_loaded": false, "inference_source": "unavailable" }`
-- Model info: `GET /api/v1/model/info` — checkpoint fields are null; metrics are not invented
+- Upload: http://localhost:3000/upload
+- Case API: `POST /api/v1/cases`, `POST /api/v1/cases/{id}/files/{modality}`, `POST /api/v1/cases/{id}/complete`
+- PRD ingest (store + validate only): `POST /api/v1/predict`, `POST /api/v1/evaluate` — returns 201, `job_id: null`
 
 ```bash
 cd backend
@@ -64,18 +67,11 @@ pytest
 cd frontend
 npm install
 npm run dev
-```
-
-App: http://localhost:3000
-
-Vite proxies `/api` to `http://127.0.0.1:8000`. Keep the backend running so the landing page can show health status.
-
-Production build (Phase 1 smoke test):
-
-```bash
-cd frontend
+npm test
 npm run build
 ```
+
+App: http://localhost:3000 — use **Upload MRI** to assign T1 / T1ce / T2 / FLAIR (and optional `seg`).
 
 ## Docker
 
