@@ -20,7 +20,18 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "request_id": request_id_ctx.get(),
         }
-        for key in ("case_id", "modality", "duration_ms", "validation_result"):
+        for key in (
+            "case_id",
+            "modality",
+            "duration_ms",
+            "validation_result",
+            "job_id",
+            "job_type",
+            "inference_source",
+            "error",
+            "status_code",
+            "output_shape",
+        ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)
         if record.exc_info:
