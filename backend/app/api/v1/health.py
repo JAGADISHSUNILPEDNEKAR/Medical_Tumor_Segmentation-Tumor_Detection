@@ -5,7 +5,8 @@ from app.schemas.health import HealthResponse, ModelInfoResponse
 router = APIRouter(tags=["system"])
 
 _NO_CHECKPOINT_MESSAGE = (
-    "No trained checkpoint is registered. Headline Dice/HD95 metrics are not available."
+    "No trained checkpoint is registered. Mock inference is available for "
+    "pipeline validation. Headline Dice/HD95 metrics are not available."
 )
 
 
@@ -14,7 +15,7 @@ def get_health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         model_loaded=False,
-        inference_source="unavailable",
+        inference_source="mock",
     )
 
 
@@ -28,6 +29,7 @@ def get_model_info() -> ModelInfoResponse:
         num_classes=4,
         input_modalities=["T1", "T1ce", "T2", "FLAIR"],
         model_loaded=False,
-        inference_source="unavailable",
+        inference_source="mock",
+        model_version=None,
         message=_NO_CHECKPOINT_MESSAGE,
     )
