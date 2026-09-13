@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import time
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
@@ -60,3 +63,45 @@ def write_nifti(
         image.header.set_zooms(zooms)
     nib.save(image, str(path))
     return path
+
+
+REQUIRED = ("t1", "t1ce", "t2", "flair")
+
+
+def file_tuple(path: Path, filename: str | None = None) -> tuple[str, BytesIO, str]:
+    """Create an upload file tuple from a NIfTI file path."""
+    data = path.read_bytes()
+    name = filename if filename is not None else path.name
+    return (name, BytesIO(data), "application/octet-stream")
+
+
+def create_ready_case_files(
+    client: TestClient,
+    tmp_path: Path,
+    *,
+    include_seg: bool = False,
+    shape: tuple[int, int, int] = (8, 8, 8),
+) -> dict:
+    """Helper: create and upload all 4 required modalities, return predict response dict."""
+    files = {
+        name: file_tuple(write_nifti(tmp_path / f"{name}.nii.gz", shape=shape))
+        for name in REQUIRED
+    }
+    if include_seg:
+        files["seg"] = file_tuple(
+            write_nifti(tmp_path / "seg.nii.gz", segmentation=True, shape=shape)
+        )
+    return files
+
+
+def wait_for_job(client: TestClient, job_id: str, *, timeout: float = 10.0) -> dict:
+    """Poll GET /api/v1/jobs/{job_id} until terminal state or timeout."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        response = client.get(f"/api/v1/jobs/{job_id}")
+        assert response.status_code == 200
+        body = response.json()
+        if body["status"] in ("COMPLETED", "FAILED"):
+            return body
+        time.sleep(0.1)
+    raise TimeoutError(f"Job {job_id} did not complete within {timeout}s")
