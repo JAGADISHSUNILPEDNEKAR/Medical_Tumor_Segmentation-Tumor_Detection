@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +13,25 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestIdMiddleware
 from app.db.session import configure_database
+from app.inference.mock import MockInferenceService
+from app.services.job_queue import JobQueue
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan: start/stop the FIFO job queue worker."""
+    settings = get_settings()
+    upload_root = Path(settings.upload_dir).resolve()
+
+    inference_service = MockInferenceService()
+    queue = JobQueue(inference_service, upload_root)
+
+    app.state.job_queue = queue
+    app.state.inference_service = inference_service
+
+    await queue.start()
+    yield
+    await queue.stop()
 
 
 def create_app() -> FastAPI:
@@ -25,12 +46,13 @@ def create_app() -> FastAPI:
         title="Medical Tumor Segmentation API",
         description=(
             "Research / decision-support prototype. Not a diagnostic device. "
-            "Not clinically validated. Phase 2 validates and stores BraTS NIfTI cases. "
-            "Inference is not started."
+            "Not clinically validated. Phase 3 provides mock inference with "
+            "async job execution and synthetic segmentation."
         ),
-        version="0.2.0",
+        version="0.3.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
