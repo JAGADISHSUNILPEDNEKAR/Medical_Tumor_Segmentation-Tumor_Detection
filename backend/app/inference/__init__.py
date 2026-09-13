@@ -1,3 +1,4 @@
-from app.inference.base import InferenceService
+from app.inference.base import InferenceResult, InferenceService
+from app.inference.mock import MockInferenceService
 
-__all__ = ["InferenceService"]
+__all__ = ["InferenceResult", "InferenceService", "MockInferenceService"]
