@@ -242,14 +242,22 @@ def test_predict_missing_t2(client, tmp_path: Path) -> None:
     assert "T2" in response.json()["detail"]
 
 
-def test_predict_valid_does_not_start_inference(client, tmp_path: Path) -> None:
+def test_predict_returns_202_with_queued_job(client, tmp_path: Path) -> None:
+    """Phase 3 evolution: predict now returns 202 Accepted with a real job_id.
+
+    Phase 2 returned 201 with job_id=null and inference=not_started.
+    Phase 3 returns 202 with a UUID job_id and inference=mock.
+    This is an intentional contract change, not a regression.
+    """
     files = {name: _file_tuple(write_nifti(tmp_path / f"{name}.nii.gz")) for name in REQUIRED}
     response = client.post("/api/v1/predict", files=files)
-    assert response.status_code == 201
+    assert response.status_code == 202
     body = response.json()
-    assert body["status"] == "READY"
-    assert body["job_id"] is None
-    assert body["inference"] == "not_started"
+    assert body["status"] == "QUEUED"
+    assert body["job_id"] is not None
+    assert len(body["job_id"]) == 36  # UUID format
+    assert body["inference"] == "mock"
+    assert body["case_id"] is not None
 
 
 def test_evaluate_requires_seg(client, tmp_path: Path) -> None:
