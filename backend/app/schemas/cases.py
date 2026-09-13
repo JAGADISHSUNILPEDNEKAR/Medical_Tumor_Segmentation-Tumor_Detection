@@ -49,12 +49,14 @@ class CaseResponse(BaseModel):
     inference: str = "not_started"
 
 
-class PredictAcceptedResponse(CaseResponse):
-    """PRD `/predict` and `/evaluate` return a validated case in Phase 2.
+class PredictAcceptedResponse(BaseModel):
+    """Phase 3 predict/evaluate response.
 
-    A `job_id` is not issued because the async job queue is Phase 3.
-    HTTP 201 is used instead of 202 for that reason.
+    Returns HTTP 202 Accepted with a real job_id and status QUEUED.
     """
 
-    job_id: str | None = None
+    job_id: str
+    case_id: str
+    status: str
+    inference: str
     message: str

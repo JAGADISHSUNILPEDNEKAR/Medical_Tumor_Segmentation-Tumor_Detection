@@ -7,7 +7,7 @@ class HealthResponse(BaseModel):
         description="True only when a real inference implementation has loaded a checkpoint."
     )
     inference_source: str = Field(
-        description="unavailable | mock | pytorch. Phase 1 is always unavailable."
+        description="unavailable | mock | pytorch."
     )
 
 
@@ -23,4 +23,5 @@ class ModelInfoResponse(BaseModel):
     input_modalities: list[str] = Field(default_factory=lambda: ["T1", "T1ce", "T2", "FLAIR"])
     model_loaded: bool
     inference_source: str
+    model_version: str | None = None
     message: str
