@@ -59,6 +59,18 @@ export function completeCase(caseId: string): Promise<CaseResponse> {
   return sendJson<CaseResponse>(`/api/v1/cases/${caseId}/complete`, { method: "POST" });
 }
 
+export interface PredictAcceptedResponse {
+  job_id: string;
+  case_id: string;
+  status: string;
+  inference: string;
+  message: string;
+}
+
+export function predictCase(caseId: string): Promise<PredictAcceptedResponse> {
+  return sendJson<PredictAcceptedResponse>(`/api/v1/cases/${caseId}/predict`, { method: "POST" });
+}
+
 export function uploadCaseFile(
   caseId: string,
   modality: string,
