@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
-import { completeCase, createCase, uploadCaseFile } from "../lib/api";
+import { completeCase, createCase, uploadCaseFile, predictCase } from "../lib/api";
 import {
   MODALITY_LABELS,
   OPTIONAL_MODALITIES,
@@ -237,6 +238,23 @@ function ModalitySlot({
 
 function ValidationPanel({ result }: { result: CaseResponse }) {
   const spatial = result.validation?.spatial;
+  const navigate = useNavigate();
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handlePredict = async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      const response = await predictCase(result.case_id);
+      navigate(`/cases/${response.case_id}/jobs/${response.job_id}`);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
     <section className="mt-10 border border-ink-900/10 bg-white p-6" aria-labelledby="validation-heading">
       <h2 id="validation-heading" className="font-display text-2xl text-ink-950">
@@ -274,6 +292,19 @@ function ValidationPanel({ result }: { result: CaseResponse }) {
           Warning: {warning}
         </p>
       ))}
+
+      {result.status === "READY" && (
+        <div className="mt-6 border-t border-ink-900/10 pt-6">
+          {error && <p className="mb-4 text-sm text-caution-800">{error}</p>}
+          <button
+            onClick={handlePredict}
+            disabled={running}
+            className="border border-accent-700 bg-accent-700 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {running ? "Starting..." : "Run Mock Inference"}
+          </button>
+        </div>
+      )}
     </section>
   );
 }
