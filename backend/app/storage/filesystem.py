@@ -12,6 +12,7 @@ from app.core.errors import AppError
 class CasePaths:
     root: Path
     input_dir: Path
+    output_dir: Path
     metadata_dir: Path
     metadata_file: Path
 
@@ -27,10 +28,12 @@ class CaseStorage:
     def paths_for(self, case_id: str) -> CasePaths:
         root = self._case_root(case_id)
         input_dir = root / "input"
+        output_dir = root / "output"
         metadata_dir = root / "metadata"
         return CasePaths(
             root=root,
             input_dir=input_dir,
+            output_dir=output_dir,
             metadata_dir=metadata_dir,
             metadata_file=metadata_dir / "case.json",
         )
@@ -38,6 +41,7 @@ class CaseStorage:
     def prepare_case(self, case_id: str) -> CasePaths:
         paths = self.paths_for(case_id)
         paths.input_dir.mkdir(parents=True, exist_ok=True)
+        paths.output_dir.mkdir(parents=True, exist_ok=True)
         paths.metadata_dir.mkdir(parents=True, exist_ok=True)
         self._assert_inside(paths.root)
         return paths
