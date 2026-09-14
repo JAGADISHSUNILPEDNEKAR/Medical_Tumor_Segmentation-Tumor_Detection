@@ -4,7 +4,15 @@ Research / decision-support prototype for BraTS-format brain MRI tumor sub-regio
 
 **This is not a medical device. It is not clinically validated. It must not be used for diagnosis or treatment decisions.**
 
-The trained 3D U-Net is developed in a separate notebook. This repository currently contains **Phase 2**: API health, case creation, four-modality NIfTI upload, spatial validation, and isolated storage. Inference is not started.
+The trained 3D U-Net is developed in a separate notebook. This repository currently contains **Phase 4**: API health, case creation, four-modality NIfTI upload, spatial validation, isolated storage, and in-browser visualization. Inference is not started.
+
+### Phase 4: Medical Image Visualization [✓]
+
+Built an in-browser MRI visualization suite without relying on external medical servers.
+- **In-Memory NIfTI Engine**: Parses `.nii.gz` volumes using `nifti-reader-js`, preserving spatial affine geometry and scaling data without resampling.
+- **Multiplanar Slicing**: Extracts and normalizes arbitrary Axial, Coronal, and Sagittal slices natively via HTML Canvas rendering for smooth performance.
+- **3D Tumor Extraction**: A custom marching cubes engine generates lightweight, WebGL-ready triangle meshes directly from the segmentation voxel masks.
+- **Interactive Tooling**: Features crosshair synchronization across 2D planes, opacity controls, modality toggling (T1, T2, FLAIR, T1ce), and interactive 3D OrbitControls (via `react-three-fiber`).
 
 ## Current status
 
