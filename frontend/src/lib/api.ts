@@ -104,3 +104,24 @@ export function uploadCaseFile(
     xhr.send(form);
   });
 }
+
+/**
+ * Fetch a NIfTI artifact as an ArrayBuffer.
+ *
+ * @param caseId   - UUID of the case
+ * @param artifact - Allowlisted artifact name (t1, t1ce, t2, flair, segmentation)
+ * @returns Raw ArrayBuffer containing the NIfTI file bytes
+ */
+export async function fetchArtifact(
+  caseId: string,
+  artifact: string,
+): Promise<ArrayBuffer> {
+  const response = await fetch(
+    `${apiBaseUrl()}/api/v1/cases/${encodeURIComponent(caseId)}/artifacts/${encodeURIComponent(artifact)}`,
+  );
+  if (!response.ok) {
+    await readError(response);
+  }
+  return response.arrayBuffer();
+}
+
