@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from app.core.constants import ErrorCode
+from app.core.constants import ALLOWED_NIFTI_EXTENSIONS, ErrorCode, VIEWER_ARTIFACTS
 from app.core.errors import AppError
 
 
@@ -63,6 +63,36 @@ class CaseStorage:
         serialized = json.dumps(payload, indent=2, default=str)
         paths.metadata_file.write_text(serialized, encoding="utf-8")
 
+    def resolve_artifact(self, case_id: str, artifact: str) -> Path:
+        """Resolve an allowlisted viewer artifact inside the case directory.
+
+        The artifact name is never joined into a path until it matches
+        VIEWER_ARTIFACTS exactly. Path traversal, absolute paths, and
+        unknown names are rejected.
+        """
+        if not _is_safe_artifact_name(artifact) or artifact not in VIEWER_ARTIFACTS:
+            raise AppError(
+                ErrorCode.INVALID_ARTIFACT,
+                "Unknown artifact. Allowed values: t1, t1ce, t2, flair, segmentation.",
+                status_code=400,
+                case_id=case_id,
+            )
+        folder, stem = VIEWER_ARTIFACTS[artifact]
+        paths = self.paths_for(case_id)
+        base = paths.input_dir if folder == "input" else paths.output_dir
+        self._assert_inside(base)
+        for extension in ALLOWED_NIFTI_EXTENSIONS:
+            candidate = (base / f"{stem}{extension}").resolve()
+            self._assert_inside(candidate)
+            if candidate.is_file():
+                return candidate
+        raise AppError(
+            ErrorCode.ARTIFACT_NOT_FOUND,
+            f"Artifact '{artifact}' is not available for this case.",
+            status_code=404,
+            case_id=case_id,
+        )
+
     def relative_to_root(self, path: Path) -> str:
         resolved = path.resolve()
         self._assert_inside(resolved)
@@ -87,6 +117,18 @@ class CaseStorage:
                 "Storage path escaped the upload root.",
                 status_code=500,
             )
+
+
+def _is_safe_artifact_name(artifact: str) -> bool:
+    if not artifact or not artifact.isascii():
+        return False
+    if artifact != artifact.strip():
+        return False
+    if "/" in artifact or "\\" in artifact or ".." in artifact:
+        return False
+    if Path(artifact).is_absolute() or Path(artifact).name != artifact:
+        return False
+    return artifact.isalnum() or artifact.replace("_", "").isalnum()
 
 
 def metadata_dict(payload: object) -> dict[str, object]:
