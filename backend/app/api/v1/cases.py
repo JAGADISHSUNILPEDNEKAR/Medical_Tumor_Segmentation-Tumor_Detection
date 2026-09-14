@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, UploadFile
+from fastapi.responses import FileResponse
 
 from app.api.deps import get_case_service
 from app.schemas.cases import CaseCreateResponse, CaseResponse
@@ -39,3 +40,20 @@ async def upload_case_file(
 def complete_case(case_id: str, service: CaseService = Depends(get_case_service)) -> CaseResponse:
     case = service.complete_case(case_id)
     return service.to_response(case)
+
+
+@router.get("/{case_id}/artifacts/{artifact}")
+def get_case_artifact(
+    case_id: str,
+    artifact: str,
+    service: CaseService = Depends(get_case_service),
+) -> FileResponse:
+    """Stream an allowlisted NIfTI artifact. Does not expose storage paths."""
+    path = service.get_artifact_file(case_id, artifact)
+    media_type = "application/gzip" if path.name.endswith(".gz") else "application/octet-stream"
+    return FileResponse(
+        path=path,
+        media_type=media_type,
+        filename=path.name,
+        content_disposition_type="inline",
+    )
