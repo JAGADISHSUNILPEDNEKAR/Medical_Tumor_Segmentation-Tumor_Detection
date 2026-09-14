@@ -39,6 +39,16 @@ REGION_NAMES: dict[int, str] = {
 
 ALLOWED_NIFTI_EXTENSIONS: tuple[str, ...] = (".nii", ".nii.gz")
 
+# Controlled viewer artifacts. Keys are the only values accepted in the URL.
+# Values: (folder, stored stem) — never built from raw user path segments.
+VIEWER_ARTIFACTS: dict[str, tuple[str, str]] = {
+    "t1": ("input", "t1"),
+    "t1ce": ("input", "t1ce"),
+    "t2": ("input", "t2"),
+    "flair": ("input", "flair"),
+    "segmentation": ("output", "segmentation"),
+}
+
 # ── Spatial tolerances ────────────────────────────────────────────────────────
 AFFINE_RTOL = 1e-5
 AFFINE_ATOL = 1e-4
@@ -94,6 +104,10 @@ class ErrorCode(StrEnum):
     INFERENCE_FAILED = "INFERENCE_FAILED"
     RESULT_CREATION_FAILED = "RESULT_CREATION_FAILED"
     INVALID_JOB_STATE = "INVALID_JOB_STATE"
+
+    # Artifact access (Phase 4)
+    INVALID_ARTIFACT = "INVALID_ARTIFACT"
+    ARTIFACT_NOT_FOUND = "ARTIFACT_NOT_FOUND"
 
 
 def to_brats_labels(mask: np.ndarray) -> np.ndarray:
