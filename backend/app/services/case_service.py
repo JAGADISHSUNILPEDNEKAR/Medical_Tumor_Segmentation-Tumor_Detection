@@ -77,6 +77,11 @@ class CaseService:
         )
         return case
 
+    def get_artifact_file(self, case_id: str, artifact: str) -> Path:
+        """Return the stored NIfTI path for an allowlisted viewer artifact."""
+        self.get_case(case_id)
+        return self.storage.resolve_artifact(case_id, artifact)
+
     def get_case(self, case_id: str) -> CaseRecord:
         case = self.session.get(CaseRecord, case_id)
         if case is None:
