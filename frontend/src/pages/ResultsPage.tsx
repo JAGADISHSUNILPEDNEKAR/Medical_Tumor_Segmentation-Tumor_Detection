@@ -1,6 +1,6 @@
-import { AlertTriangle, CheckCircle2, ChevronRight, FileX, Loader2, TestTube2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Eye, FileX, Loader2, TestTube2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 interface JobStatus {
   job_id: string;
@@ -39,7 +39,8 @@ interface ResultData {
 }
 
 export function ResultsPage() {
-  const { jobId } = useParams<{ jobId: string }>();
+  const { caseId, jobId } = useParams<{ caseId: string; jobId: string }>();
+  const navigate = useNavigate();
   const [job, setJob] = useState<JobStatus | null>(null);
   const [result, setResult] = useState<ResultData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -225,11 +226,16 @@ export function ResultsPage() {
                 </div>
               </div>
               
-              <div className="p-4 bg-slate-800/50 border border-slate-800 rounded-xl text-center">
-                <p className="text-slate-400 text-sm">
-                  Clinical 3D Viewer integration is scheduled for Phase 4.
-                </p>
-              </div>
+              {result.segmentation.available && caseId && (
+                <button
+                  onClick={() => navigate(`/cases/${caseId}/viewer`)}
+                  className="w-full flex items-center justify-center gap-2 p-4 bg-accent-700/10 border border-accent-700/20 rounded-xl text-accent-700 font-medium hover:bg-accent-700/20 transition-colors"
+                  aria-label="Open Medical Image Viewer"
+                >
+                  <Eye className="w-5 h-5" />
+                  Open Medical Image Viewer
+                </button>
+              )}
 
             </div>
           )}
