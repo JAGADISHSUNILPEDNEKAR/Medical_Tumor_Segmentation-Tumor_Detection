@@ -34,6 +34,21 @@ Upload UX needs per-file progress, so these case endpoints are **additive** (not
 - `POST /api/v1/cases/{case_id}/complete`
 - `GET /api/v1/cases/{case_id}`
 
+## Frontend (`frontend/`)
+
+-   **React + TypeScript + Vite**: Built on standard tooling with `Tailwind CSS` for styling.
+-   **Routing**: Client-side routing for navigating cases, jobs, and the viewer.
+-   **API Client**: Standardized fetch wrapper (`src/lib/api.ts`) managing the upload lifecycle and file fetching.
+-   **State Management**: React local state for UI transitions; URL parameters drive case/job lookup.
+
+**Phase 4 Visualization Component**:
+The visualization architecture uses an entirely in-browser NIfTI parsing and rendering engine without requiring external medical imaging servers (like Orthanc/PACS).
+-   **Parsing**: `nifti-reader-js` decodes `.nii.gz` binary artifacts directly into raw Float32 arrays, preserving spatial Affine headers and spacing.
+-   **2D Multiplanar Slicing**: Custom libraries (`src/lib/sliceExtraction.ts`) extract arbitrary Ax/Cor/Sag slices from the 1D flat arrays, performing percentile window normalization and HTML Canvas 2D rendering for performance.
+-   **Coordinate Convention**: The system assumes standard NIfTI **RAS+** (Right-Anterior-Superior) orientation across all axes without resampling.
+-   **3D Mesh Generation**: A custom, dependency-free Marching Cubes algorithm (`src/lib/meshGeneration.ts`) translates segmentation voxels into triangles, dynamically scaling coordinates by NIfTI voxel spacing.
+-   **3D Rendering**: `Three.js` (via `react-three-fiber`) renders the resulting tumor meshes, constrained by a strict triangle-budget decimation pass to ensure 60fps WebGL rendering.
+
 ## Case states
 
 `CREATED` → `UPLOADING` → `VALIDATING` → `READY` or `FAILED`
