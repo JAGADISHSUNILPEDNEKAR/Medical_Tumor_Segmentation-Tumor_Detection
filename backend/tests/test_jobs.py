@@ -128,3 +128,49 @@ def test_predict_failure_handling(client: TestClient, tmp_path: Path, monkeypatc
     assert "Mock inference failed" in final_state["error_message"]
     # Internal tracebacks shouldn't be exposed
     assert "Simulated failure" not in final_state["error_message"]
+
+
+def test_predict_existing_case_runs_mock_inference(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """POST /cases/{id}/predict on a READY case enqueues a job and completes."""
+    files = create_ready_case_files(client, tmp_path)
+    case_id = client.post("/api/v1/cases").json()["case_id"]
+    for modality, payload in files.items():
+        upload = client.post(
+            f"/api/v1/cases/{case_id}/files/{modality}", files={"file": payload}
+        )
+        assert upload.status_code == 200
+    assert client.post(f"/api/v1/cases/{case_id}/complete").json()["status"] == "READY"
+
+    response = client.post(f"/api/v1/cases/{case_id}/predict")
+    assert response.status_code == 202
+    body = response.json()
+    assert body["case_id"] == case_id
+    assert body["status"] == JobStatus.QUEUED.value
+    assert body["inference"] == "mock"
+
+    job = wait_for_job(client, body["job_id"])
+    assert job["status"] == JobStatus.COMPLETED.value
+    assert job["result_id"]
+
+
+def test_predict_existing_case_not_ready_returns_409(client: TestClient) -> None:
+    """A case with no uploads must be refused with an actionable error, not a 500."""
+    case_id = client.post("/api/v1/cases").json()["case_id"]
+
+    response = client.post(f"/api/v1/cases/{case_id}/predict")
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"] == "INVALID_CASE_STATE"
+    assert body["case_id"] == case_id
+    assert "READY" in body["detail"]
+    # The message must be actionable and must not leak internals.
+    assert "Traceback" not in body["detail"]
+
+
+def test_predict_unknown_case_returns_404(client: TestClient) -> None:
+    response = client.post("/api/v1/cases/does-not-exist/predict")
+    assert response.status_code == 404
+    assert response.json()["error"] == "CASE_NOT_FOUND"

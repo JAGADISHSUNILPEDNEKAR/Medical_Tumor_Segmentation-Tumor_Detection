@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, File, UploadFile
+from sqlalchemy.orm import Session
 
 from app.api.deps import get_case_service, get_job_queue, get_job_service
-from app.core.constants import ErrorCode, JobType, REQUIRED_MODALITIES
-from app.db.session import get_session
+from app.core.constants import CaseStatus, ErrorCode, JobType, REQUIRED_MODALITIES
 from app.core.errors import AppError
+from app.db.session import get_session
 from app.schemas.cases import PredictAcceptedResponse
 from app.services.case_service import CaseService
 from app.services.job_queue import JobQueue
@@ -77,11 +78,16 @@ def predict_existing_case(
 ) -> PredictAcceptedResponse:
     """Start mock inference for an already uploaded and READY case."""
     case = service.get_case(case_id)
-    if case.status != "READY":
+    if case.status != CaseStatus.READY:
         raise AppError(
             ErrorCode.INVALID_CASE_STATE,
-            f"Case {case_id} is not READY.",
-            status_code=400,
+            (
+                f"Case is {case.status} and cannot be submitted for inference. "
+                "Upload all four modalities (T1, T1ce, T2, FLAIR) and complete "
+                "the case so it reaches READY, then try again."
+            ),
+            status_code=409,
+            case_id=case.case_id,
         )
 
     try:
@@ -110,8 +116,6 @@ def predict_existing_case(
         message="Job queued for mock inference. Poll GET /api/v1/jobs/{job_id} for status.",
     )
 
-
-from sqlalchemy.orm import Session
 
 async def _ingest_and_enqueue(
     session: Session,
