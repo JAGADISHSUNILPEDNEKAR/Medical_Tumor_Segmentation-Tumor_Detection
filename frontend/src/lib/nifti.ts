@@ -9,7 +9,7 @@
 import * as nifti from "nifti-reader-js";
 import * as pako from "pako";
 
-import { apiBaseUrl } from "./api";
+import { fetchArtifact } from "./api";
 import type { NiftiVolume } from "../types/viewer";
 
 /**
@@ -23,16 +23,7 @@ export async function loadNiftiFromUrl(
   caseId: string,
   artifact: string,
 ): Promise<NiftiVolume> {
-  const url = `${apiBaseUrl()}/api/v1/cases/${encodeURIComponent(caseId)}/artifacts/${encodeURIComponent(artifact)}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to load artifact '${artifact}': ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  return parseNiftiBuffer(arrayBuffer);
+  return parseNiftiBuffer(await fetchArtifact(caseId, artifact));
 }
 
 /**

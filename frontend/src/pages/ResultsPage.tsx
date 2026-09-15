@@ -272,7 +272,7 @@ export function ResultsPage() {
               {result.segmentation.available && caseId && (
                 <button
                   type="button"
-                  onClick={() => navigate(`/cases/${caseId}/viewer`)}
+                  onClick={() => navigate(`/cases/${caseId}/viewer?job=${encodeURIComponent(jobId)}`)}
                   className="flex w-full items-center justify-center gap-2 rounded-lg border border-accent-700 bg-accent-700 p-4 font-semibold text-white transition-colors hover:bg-accent-600"
                 >
                   <Eye className="h-5 w-5" aria-hidden />
