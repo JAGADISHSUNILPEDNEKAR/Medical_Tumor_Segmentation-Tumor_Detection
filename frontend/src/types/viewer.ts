@@ -132,6 +132,17 @@ export const MAX_TRIANGLES_PER_REGION = 200_000;
 export const MODALITIES = ["flair", "t1", "t1ce", "t2"] as const;
 export type Modality = (typeof MODALITIES)[number];
 
+/**
+ * Display labels for every modality a case can hold, including the optional
+ * ground-truth segmentation. Ordered as the PRD presents them.
+ */
+export const ALL_MODALITY_LABELS: readonly { key: string; label: string }[] = [
+  { key: "t1", label: "T1" },
+  { key: "t1ce", label: "T1ce" },
+  { key: "t2", label: "T2" },
+  { key: "flair", label: "FLAIR" },
+] as const;
+
 /** Overall viewer loading status. */
 export type ViewerStatus = "loading" | "loaded" | "error";
 

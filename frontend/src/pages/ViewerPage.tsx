@@ -11,9 +11,13 @@ import type {
 } from "../types/viewer";
 import { defaultRegionVisibility } from "../types/viewer";
 import { loadNiftiFromUrl } from "../lib/nifti";
+import { fetchCase, fetchJob } from "../lib/api";
+import type { CaseResponse, JobStatusResponse } from "../types/api";
 import { getSliceCount, PLANE_AXIS } from "../lib/sliceExtraction";
+import { useSliceKeyboard } from "../hooks/useSliceKeyboard";
 
 import { ViewerToolbar } from "../components/viewer/ViewerToolbar";
+import { CaseMetadataPanel } from "../components/viewer/CaseMetadataPanel";
 import { ViewerDisclaimer } from "../components/viewer/ViewerDisclaimer";
 import { ModalitySelector } from "../components/viewer/ModalitySelector";
 import { PlaneView } from "../components/viewer/PlaneView";
@@ -66,6 +70,50 @@ export function ViewerPage() {
   });
 
   const [loadingModality, setLoadingModality] = useState(false);
+  const [activePlane, setActivePlane] = useState<PlaneId>("axial");
+  const [caseData, setCaseData] = useState<CaseResponse | null>(null);
+  const [job, setJob] = useState<JobStatusResponse | null>(null);
+  const [metadataLoading, setMetadataLoading] = useState(true);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+
+  // Load case metadata (modalities, upload time) and the latest job status
+  useEffect(() => {
+    if (!caseId) return;
+    let cancelled = false;
+
+    async function loadMetadata() {
+      setMetadataLoading(true);
+      try {
+        const data = await fetchCase(caseId!);
+        if (cancelled) return;
+        setCaseData(data);
+        setMetadataError(null);
+      } catch {
+        if (!cancelled) {
+          setMetadataError("Case details are unavailable. The viewer still works.");
+        }
+      } finally {
+        if (!cancelled) setMetadataLoading(false);
+      }
+    }
+
+    loadMetadata();
+    return () => { cancelled = true; };
+  }, [caseId]);
+
+  // Track the job named in the query string, when the viewer was opened
+  // from a results page. Absent that, the panel reports "Not started".
+  useEffect(() => {
+    const jobId = new URLSearchParams(window.location.search).get("job");
+    if (!jobId) return;
+    let cancelled = false;
+
+    fetchJob(jobId)
+      .then((data) => { if (!cancelled) setJob(data); })
+      .catch(() => { /* Job status is supplementary; the viewer works without it. */ });
+
+    return () => { cancelled = true; };
+  }, [caseId]);
 
   // Load segmentation once
   useEffect(() => {
@@ -178,6 +226,15 @@ export function ViewerPage() {
     setState((prev) => ({ ...prev, show3D: !prev.show3D }));
   }, []);
 
+  // KeyJ / KeyL step through the active plane; KeyI / KeyK cycle planes.
+  useSliceKeyboard({
+    activePlane,
+    slices: state.slices,
+    onSliceChange: handleSliceChange,
+    onActivePlaneChange: setActivePlane,
+    enabled: state.mriVolume !== null,
+  });
+
   /**
    * Crosshair synchronization: clicking on one plane updates the
    * other two planes' slice indices.
@@ -185,6 +242,7 @@ export function ViewerPage() {
   const handleCrosshairClick = useCallback(
     (plane: PlaneId, xFrac: number, yFrac: number) => {
       if (!state.mriVolume) return;
+      setActivePlane(plane);
 
       setState((prev) => {
         const newSlices = { ...prev.slices };
@@ -249,8 +307,18 @@ export function ViewerPage() {
 
   if (!caseId) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <p className="text-ink-500">No case ID specified.</p>
+      <div className="mx-auto max-w-2xl px-4 py-20 text-center">
+        <h1 className="font-display text-2xl text-ink-950">No case selected yet</h1>
+        <p className="mt-2 text-sm text-ink-500">
+          Upload a four-modality BraTS case to generate a segmentation you can
+          review here.
+        </p>
+        <Link
+          to="/upload"
+          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent-700 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-600"
+        >
+          Go to upload
+        </Link>
       </div>
     );
   }
@@ -271,6 +339,15 @@ export function ViewerPage() {
 
         {/* Disclaimer */}
         <ViewerDisclaimer />
+
+        {/* Case metadata */}
+        <CaseMetadataPanel
+          caseId={caseId}
+          caseData={caseData}
+          job={job}
+          loading={metadataLoading}
+          error={metadataError}
+        />
 
         {/* Controls row: modality + overlay */}
         <div className="grid gap-6 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-2">
@@ -316,6 +393,8 @@ export function ViewerPage() {
                 <PlaneView
                   key={plane}
                   plane={plane}
+                  active={plane === activePlane}
+                  onActivate={setActivePlane}
                   mriVolume={state.mriVolume}
                   segVolume={state.segVolume}
                   sliceIndex={state.slices[plane].index}
@@ -335,6 +414,8 @@ export function ViewerPage() {
               <SliceControls
                 slices={state.slices}
                 onSliceChange={handleSliceChange}
+                activePlane={activePlane}
+                onActivePlaneChange={setActivePlane}
               />
             </div>
 

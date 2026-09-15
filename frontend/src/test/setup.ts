@@ -25,6 +25,21 @@ if (typeof globalThis.ImageData === "undefined") {
   };
 }
 
+/**
+ * jsdom has no 2D canvas backend, so PlaneView's `getContext("2d")` throws a
+ * "Not implemented" error on every render and buries real failures in noise.
+ * Stub the handful of methods the viewer actually calls. Pixel output is
+ * verified directly against sliceExtraction's compositor, not through canvas.
+ */
+if (typeof HTMLCanvasElement !== "undefined") {
+  HTMLCanvasElement.prototype.getContext = (() =>
+    ({
+      putImageData: () => {},
+      clearRect: () => {},
+      drawImage: () => {},
+    })) as unknown as HTMLCanvasElement["getContext"];
+}
+
 afterEach(() => {
   cleanup();
 });

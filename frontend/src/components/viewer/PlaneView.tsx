@@ -32,6 +32,10 @@ interface PlaneViewProps {
   regionVisibility: RegionVisibility;
   /** Called when user clicks on the canvas to set crosshair. */
   onCrosshairClick?: (plane: PlaneId, xFrac: number, yFrac: number) => void;
+  /** Whether this plane currently receives KeyJ / KeyL slice steps. */
+  active?: boolean;
+  /** Called when this plane should become the keyboard target. */
+  onActivate?: (plane: PlaneId) => void;
 }
 
 const PLANE_LABELS: Record<PlaneId, string> = {
@@ -52,6 +56,8 @@ export function PlaneView({
   overlayOpacity,
   regionVisibility,
   onCrosshairClick,
+  active = false,
+  onActivate,
 }: PlaneViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -95,6 +101,7 @@ export function PlaneView({
   }, [renderSlice]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    onActivate?.(plane);
     if (!onCrosshairClick || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const xFrac = (e.clientX - rect.left) / rect.width;
@@ -103,11 +110,16 @@ export function PlaneView({
   };
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div
+      className={`flex flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition-colors ${
+        active ? "border-accent-700" : "border-slate-200"
+      }`}
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
         <span className="text-xs font-bold uppercase tracking-wider text-accent-700">
           {PLANE_LABELS[plane]}
+          {active && <span className="sr-only"> (active for keyboard navigation)</span>}
         </span>
         <span className="font-mono text-xs text-ink-500">
           Slice {sliceIndex + 1} / {totalSlices}
