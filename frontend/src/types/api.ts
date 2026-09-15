@@ -90,3 +90,53 @@ export function parseApiError(status: number, body: unknown): ApiError {
   }
   return new ApiError(`Request failed (${status}).`, status);
 }
+
+export type JobStatus = "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | string;
+
+export interface JobStatusResponse {
+  job_id: string;
+  case_id: string;
+  job_type: string;
+  status: JobStatus;
+  progress: number;
+  inference_source: InferenceSource | string;
+  model_version: string | null;
+  result_id: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+/** Per-region volumetrics. Keyed by the backend's human-readable region name. */
+export interface RegionMeasurement {
+  /** BraTS label value (1 = NCR, 2 = ED, 4 = ET). Authoritative for display colour. */
+  label: number;
+  voxel_count: number;
+  volume_mm3: number;
+  volume_cm3: number;
+}
+
+export interface Measurements {
+  /** True while results come from MockInferenceService. */
+  synthetic: boolean;
+  description: string;
+  foreground_voxels: number;
+  foreground_volume_mm3: number;
+  foreground_volume_cm3: number;
+  regions: Record<string, RegionMeasurement>;
+}
+
+export interface ResultResponse {
+  result_id: string;
+  job_id: string;
+  case_id: string;
+  status: string;
+  inference_source: InferenceSource | string;
+  model_version: string | null;
+  segmentation: { available: boolean };
+  measurements: Measurements;
+  evaluation: { available: boolean; dice: number | null; hd95_mm: number | null };
+  created_at: string;
+}

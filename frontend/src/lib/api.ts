@@ -1,4 +1,12 @@
-import { parseApiError, type CaseCreateResponse, type CaseResponse, type HealthResponse, type ModelInfoResponse } from "../types/api";
+import {
+  parseApiError,
+  type CaseCreateResponse,
+  type CaseResponse,
+  type HealthResponse,
+  type JobStatusResponse,
+  type ModelInfoResponse,
+  type ResultResponse,
+} from "../types/api";
 
 export function apiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_URL;
@@ -69,6 +77,14 @@ export interface PredictAcceptedResponse {
 
 export function predictCase(caseId: string): Promise<PredictAcceptedResponse> {
   return sendJson<PredictAcceptedResponse>(`/api/v1/cases/${caseId}/predict`, { method: "POST" });
+}
+
+export function fetchJob(jobId: string): Promise<JobStatusResponse> {
+  return getJson<JobStatusResponse>(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function fetchResult(resultId: string): Promise<ResultResponse> {
+  return getJson<ResultResponse>(`/api/v1/results/${encodeURIComponent(resultId)}`);
 }
 
 export function uploadCaseFile(

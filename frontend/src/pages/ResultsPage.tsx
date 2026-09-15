@@ -1,243 +1,285 @@
-import { AlertTriangle, CheckCircle2, ChevronRight, Eye, FileX, Loader2, TestTube2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  Eye,
+  FileX,
+  Loader2,
+  TestTube2,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
-interface JobStatus {
-  job_id: string;
-  case_id: string;
-  status: string;
-  progress: number;
-  inference_source: string;
-  result_id?: string;
-  error_code?: string;
-  error_message?: string;
+import { fetchJob, fetchResult } from "../lib/api";
+import { ApiError, type JobStatusResponse, type ResultResponse } from "../types/api";
+import { REGION_CONFIG } from "../types/viewer";
+
+/** Milliseconds between job-status polls while a job is QUEUED or RUNNING. */
+const POLL_INTERVAL_MS = 1000;
+
+/** Terminal job states: polling stops once one of these is reached. */
+const TERMINAL_STATUSES = new Set(["COMPLETED", "FAILED"]);
+
+function statusTone(status: string): string {
+  if (status === "COMPLETED") return "text-emerald-700";
+  if (status === "FAILED") return "text-red-700";
+  return "text-accent-700";
 }
 
-interface ResultData {
-  result_id: string;
-  job_id: string;
-  case_id: string;
-  inference_source: string;
-  measurements: {
-    synthetic: boolean;
-    description: string;
-    foreground_volume_cm3: number;
-    foreground_volume_mm3: number;
-    regions: Record<
-      string,
-      {
-        label: number;
-        voxel_count: number;
-        volume_mm3: number;
-        volume_cm3: number;
-      }
-    >;
-  };
-  segmentation: {
-    available: boolean;
-  };
+function StatusIcon({ status }: { status: string }) {
+  if (status === "FAILED") {
+    return <AlertTriangle className="h-5 w-5 text-red-600" aria-hidden />;
+  }
+  if (status === "COMPLETED") {
+    return <CheckCircle2 className="h-5 w-5 text-emerald-600" aria-hidden />;
+  }
+  return <Loader2 className="h-5 w-5 animate-spin text-accent-700" aria-hidden />;
 }
 
 export function ResultsPage() {
   const { caseId, jobId } = useParams<{ caseId: string; jobId: string }>();
   const navigate = useNavigate();
-  const [job, setJob] = useState<JobStatus | null>(null);
-  const [result, setResult] = useState<ResultData | null>(null);
+  const [job, setJob] = useState<JobStatusResponse | null>(null);
+  const [result, setResult] = useState<ResultResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!jobId) return;
+    let cancelled = false;
 
-    let isPolling = true;
-
-    const pollJob = async () => {
+    async function poll() {
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/jobs/${jobId}`);
-        if (!response.ok) throw new Error("Failed to fetch job status");
-        
-        const data: JobStatus = await response.json();
-        if (!isPolling) return;
+        const data = await fetchJob(jobId!);
+        if (cancelled) return;
         setJob(data);
 
         if (data.status === "COMPLETED" && data.result_id) {
-          fetchResult(data.result_id);
-          isPolling = false;
-        } else if (data.status === "FAILED") {
-          isPolling = false;
-        } else {
-          // Poll again
-          setTimeout(pollJob, 1000);
+          const resultData = await fetchResult(data.result_id);
+          if (!cancelled) setResult(resultData);
+          return;
         }
+        if (TERMINAL_STATUSES.has(data.status)) return;
+
+        timerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
       } catch (err) {
-        if (!isPolling) return;
-        setError(err instanceof Error ? err.message : "An error occurred");
-        isPolling = false;
+        if (cancelled) return;
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Could not reach the analysis service. Check that the backend is running, then reload.",
+        );
       }
-    };
+    }
 
-    pollJob();
-
+    poll();
     return () => {
-      isPolling = false;
+      cancelled = true;
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
     };
   }, [jobId]);
 
-  const fetchResult = async (resultId: string) => {
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/results/${resultId}`);
-      if (!response.ok) throw new Error("Failed to fetch result");
-      const data: ResultData = await response.json();
-      setResult(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load results");
-    }
-  };
+  if (!jobId) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-16 text-center">
+        <h1 className="font-display text-2xl text-ink-950">No job selected</h1>
+        <p className="mt-2 text-sm text-ink-500">
+          Start from an upload to run an analysis and see its results here.
+        </p>
+        <Link
+          to="/upload"
+          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent-700 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-600"
+        >
+          Go to upload
+        </Link>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      
-      {/* HEADER */}
+    <div className="mx-auto max-w-4xl space-y-8 px-4 pb-20">
       <header className="space-y-2 pt-6">
-        <div className="flex items-center space-x-2 text-sm text-slate-400">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-2 text-sm text-ink-500"
+        >
           <span>Jobs</span>
-          <ChevronRight className="w-4 h-4" />
-          <span className="truncate font-mono">{jobId}</span>
-        </div>
-        <h1 className="text-3xl font-light text-slate-100 tracking-tight">
-          Inference Result
-        </h1>
+          <ChevronRight className="h-4 w-4" aria-hidden />
+          <span className="truncate font-mono text-xs">{jobId}</span>
+        </nav>
+        <h1 className="font-display text-3xl text-ink-950">Inference result</h1>
       </header>
 
-      {/* GLOBAL MOCK WARNING */}
-      <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex gap-4 items-start">
-        <div className="bg-amber-500/20 p-2 rounded-xl text-amber-400 shrink-0">
-          <TestTube2 className="w-5 h-5" />
-        </div>
-        <div>
-          <h3 className="text-amber-400 font-medium tracking-wide">Synthetic Demo Mode</h3>
-          <p className="text-amber-200/70 text-sm mt-1 leading-relaxed max-w-2xl">
-            This is a non-clinical environment. The displayed segmentation and measurements are generated using deterministic geometric algorithms (ellipsoids) and are NOT the output of a trained medical model.
+      <div className="flex items-start gap-3 rounded-lg border border-amber-400/40 bg-caution-50 p-4">
+        <TestTube2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700" aria-hidden />
+        <div className="space-y-1">
+          <h2 className="text-sm font-semibold text-caution-800">Synthetic demo mode</h2>
+          <p className="text-sm leading-relaxed text-caution-800">
+            This is a non-clinical environment. The segmentation and measurements
+            below are produced by a deterministic geometric mock, not by a trained
+            medical model. They must not be used for diagnosis or treatment.
           </p>
         </div>
       </div>
 
       {error ? (
-        <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col items-center justify-center text-center space-y-4">
-          <FileX className="w-12 h-12 text-red-400" />
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center space-y-4 rounded-lg border border-red-200 bg-red-50 p-8 text-center"
+        >
+          <FileX className="h-10 w-10 text-red-600" aria-hidden />
           <div>
-            <h2 className="text-red-400 font-medium">Error Loading Job</h2>
-            <p className="text-red-300/70 text-sm mt-1">{error}</p>
+            <h2 className="font-semibold text-red-800">Could not load this job</h2>
+            <p className="mt-1 text-sm text-red-700">{error}</p>
           </div>
         </div>
       ) : !job ? (
-        <div className="p-12 border border-slate-800 rounded-2xl flex flex-col items-center justify-center space-y-4">
-          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-          <p className="text-slate-400 animate-pulse">Initializing...</p>
+        <div className="flex flex-col items-center justify-center space-y-3 rounded-lg border border-slate-200 bg-white p-12">
+          <Loader2 className="h-7 w-7 animate-spin text-accent-700" aria-hidden />
+          <p className="text-sm text-ink-500">Loading job status…</p>
         </div>
       ) : (
         <>
-          {/* JOB STATUS CARD */}
-          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl space-y-6">
+          <section
+            aria-label="Execution status"
+            className="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+          >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-slate-200">Execution Status</h2>
+              <h2 className="text-lg font-semibold text-ink-950">Execution status</h2>
               <div className="flex items-center gap-2">
-                {job.status === "FAILED" && <AlertTriangle className="w-5 h-5 text-red-400" />}
-                {job.status === "COMPLETED" && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-                {(job.status === "QUEUED" || job.status === "RUNNING") && (
-                  <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                )}
-                <span className={`text-sm font-medium ${
-                  job.status === "COMPLETED" ? "text-emerald-400" :
-                  job.status === "FAILED" ? "text-red-400" :
-                  "text-blue-400"
-                }`}>
+                <StatusIcon status={job.status} />
+                <span
+                  className={`text-sm font-semibold ${statusTone(job.status)}`}
+                  role="status"
+                  aria-live="polite"
+                >
                   {job.status}
                 </span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <div className="flex justify-between text-sm text-slate-400 font-mono">
+              <div className="flex justify-between font-mono text-xs text-ink-500">
                 <span>Progress</span>
-                <span>{job.progress}%</span>
+                <span className="tabular-nums">{job.progress}%</span>
               </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-500 ease-out rounded-full ${
-                    job.status === "FAILED" ? "bg-red-500" : "bg-blue-500"
+              <div
+                className="h-2 overflow-hidden rounded-full bg-slate-200"
+                role="progressbar"
+                aria-valuenow={job.progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Inference progress"
+              >
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ease-out ${
+                    job.status === "FAILED" ? "bg-red-600" : "bg-accent-700"
                   }`}
                   style={{ width: `${job.progress}%` }}
                 />
               </div>
             </div>
 
+            <dl className="grid gap-x-6 gap-y-2 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2">
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-500">Inference source</dt>
+                <dd className="font-medium text-ink-700">{job.inference_source}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-500">Model version</dt>
+                <dd className="font-medium text-ink-700">
+                  {job.model_version ?? "Not registered"}
+                </dd>
+              </div>
+            </dl>
+
             {job.status === "FAILED" && job.error_message && (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <p className="text-red-400 text-sm font-medium">Error: {job.error_code}</p>
-                <p className="text-red-300/80 text-sm mt-1">{job.error_message}</p>
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
+                <p className="text-sm font-semibold text-red-800">
+                  Error: {job.error_code}
+                </p>
+                <p className="mt-1 text-sm text-red-700">{job.error_message}</p>
               </div>
             )}
-          </div>
+          </section>
 
-          {/* RESULTS VISUALIZATION (When COMPLETED) */}
           {result && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex items-center gap-4">
-                <h2 className="text-2xl font-light text-slate-200">Volume Measurements</h2>
-                <span className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium rounded-full tracking-wide">
-                  SYNTHETIC
+            <section aria-label="Volume measurements" className="space-y-6">
+              <div className="flex items-center gap-3">
+                <h2 className="font-display text-2xl text-ink-950">
+                  Volume measurements
+                </h2>
+                <span className="rounded-full border border-amber-400/40 bg-caution-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-caution-800">
+                  Synthetic
                 </span>
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
-                {/* Total Volume */}
-                <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-center shadow-xl">
-                  <p className="text-sm font-medium text-slate-400">Total Foreground Volume</p>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-4xl font-light text-slate-100 tabular-nums">
+                <div className="flex flex-col justify-center rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                  <p className="text-sm font-medium text-ink-500">
+                    Total foreground volume
+                  </p>
+                  <p className="mt-2 flex items-baseline gap-2">
+                    <span className="font-display text-4xl tabular-nums text-ink-950">
                       {result.measurements.foreground_volume_cm3.toFixed(2)}
                     </span>
-                    <span className="text-slate-500 font-medium">cm³</span>
-                  </div>
+                    <span className="font-medium text-ink-500">cm³</span>
+                  </p>
+                  <p className="mt-1 text-xs tabular-nums text-ink-500">
+                    {result.measurements.foreground_voxels.toLocaleString()} voxels ·{" "}
+                    {result.measurements.foreground_volume_mm3.toFixed(0)} mm³
+                  </p>
                 </div>
 
-                {/* Subregions */}
-                <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl space-y-4">
-                  <h3 className="text-sm font-medium text-slate-400">Regional Breakdown</h3>
-                  <div className="space-y-3">
-                    {Object.entries(result.measurements.regions).map(([name, r]) => (
-                      <div key={name} className="flex justify-between items-center group">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full ${
-                            name === "ED" ? "bg-emerald-400" :
-                            name === "NCR" ? "bg-red-400" :
-                            "bg-yellow-400"
-                          }`} />
-                          <span className="text-slate-300 font-medium group-hover:text-slate-100 transition-colors">
-                            {name}
+                <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-sm font-medium text-ink-500">
+                    Regional breakdown
+                  </h3>
+                  <ul className="space-y-3">
+                    {Object.entries(result.measurements.regions).map(([name, region]) => {
+                      // Colour is keyed off the BraTS label, never the display
+                      // string, so it stays in step with the segmentation viewer.
+                      const config = REGION_CONFIG[region.label];
+                      return (
+                        <li
+                          key={name}
+                          className="flex items-center justify-between gap-4"
+                        >
+                          <span className="flex items-center gap-3">
+                            <span
+                              className="inline-block h-3 w-3 flex-shrink-0 rounded-full"
+                              style={{ backgroundColor: config?.color ?? "#64748b" }}
+                              aria-hidden
+                            />
+                            <span className="font-medium text-ink-700">
+                              {config?.name ?? name}
+                            </span>
+                            <span className="text-xs text-ink-500">
+                              {config?.fullName ?? name}
+                            </span>
                           </span>
-                        </div>
-                        <div className="text-slate-400 group-hover:text-slate-200 transition-colors tabular-nums">
-                          {r.volume_cm3.toFixed(2)} <span className="text-slate-600 text-xs">cm³</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                          <span className="whitespace-nowrap tabular-nums text-ink-700">
+                            {region.volume_cm3.toFixed(2)}{" "}
+                            <span className="text-xs text-ink-500">cm³</span>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               </div>
-              
+
               {result.segmentation.available && caseId && (
                 <button
+                  type="button"
                   onClick={() => navigate(`/cases/${caseId}/viewer`)}
-                  className="w-full flex items-center justify-center gap-2 p-4 bg-accent-700/10 border border-accent-700/20 rounded-xl text-accent-700 font-medium hover:bg-accent-700/20 transition-colors"
-                  aria-label="Open Medical Image Viewer"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-accent-700 bg-accent-700 p-4 font-semibold text-white transition-colors hover:bg-accent-600"
                 >
-                  <Eye className="w-5 h-5" />
-                  Open Medical Image Viewer
+                  <Eye className="h-5 w-5" aria-hidden />
+                  Open medical image viewer
                 </button>
               )}
-
-            </div>
+            </section>
           )}
         </>
       )}
