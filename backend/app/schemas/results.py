@@ -10,15 +10,30 @@ class SegmentationInfo(BaseModel):
     available: bool
 
 
+class RegionStats(BaseModel):
+    """Per-region geometry and statistics."""
+
+    region: str
+    label: int
+    voxel_count: int
+    volume_mm3: float
+    volume_cm3: float
+    present: bool
+    bounding_box: dict[str, list[int]] | None = None
+    centroid_mm: list[float] | None = None
+
+
 class MeasurementsInfo(BaseModel):
-    """Synthetic geometric measurements."""
+    """Synthetic or real geometric measurements."""
 
     synthetic: bool
     description: str | None = None
+    voxel_spacing_mm: list[float] | None = None
+    voxel_volume_mm3: float = 0.0
     foreground_voxels: int = 0
     foreground_volume_mm3: float = 0.0
     foreground_volume_cm3: float = 0.0
-    regions: dict[str, Any] | None = None
+    regions: list[RegionStats] | None = None
 
 
 class EvaluationInfo(BaseModel):
