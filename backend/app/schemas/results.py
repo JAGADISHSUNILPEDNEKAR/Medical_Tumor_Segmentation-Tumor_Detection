@@ -64,6 +64,15 @@ class EvaluationInfo(BaseModel):
     mean_hd95: HD95Metric | None = None
 
 
+class ProvenanceInfo(BaseModel):
+    inference_source: str
+    model_version: str | None = None
+    checkpoint_id: str | None = None
+    synthetic: bool = True
+    inference_timestamp: datetime | None = None
+    description: str | None = None
+
+
 class ResultResponse(BaseModel):
     """Response for GET /api/v1/results/{result_id}."""
 
@@ -76,4 +85,18 @@ class ResultResponse(BaseModel):
     segmentation: SegmentationInfo
     measurements: MeasurementsInfo
     evaluation: EvaluationInfo
+    provenance: ProvenanceInfo | None = None
     created_at: datetime | None = None
+
+
+class ReportResponse(BaseModel):
+    """Structured report data for a result."""
+    
+    result_id: str
+    case_id: str
+    job_id: str
+    status: str
+    measurements: MeasurementsInfo
+    evaluation: EvaluationInfo
+    provenance: ProvenanceInfo
+    created_at: datetime
