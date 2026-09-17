@@ -36,15 +36,32 @@ class MeasurementsInfo(BaseModel):
     regions: list[RegionStats] | None = None
 
 
-class EvaluationInfo(BaseModel):
-    """Evaluation metrics availability.
+class DiceMetric(BaseModel):
+    value: float
+    both_empty: bool = False
 
-    Phase 3: Dice/HD95 are not computed. available=False.
-    """
+
+class HD95Metric(BaseModel):
+    value_mm: float | None
+    defined: bool
+    reason: str | None = None
+
+
+class PerClassMetrics(BaseModel):
+    class_name: str
+    label: int
+    dice: DiceMetric | None = None
+    hd95: HD95Metric | None = None
+
+
+class EvaluationInfo(BaseModel):
+    """Evaluation metrics availability."""
 
     available: bool
-    dice: dict[str, float] | None = None
-    hd95_mm: dict[str, float] | None = None
+    ground_truth_available: bool = False
+    per_class: list[PerClassMetrics] | None = None
+    mean_dice: DiceMetric | None = None
+    mean_hd95: HD95Metric | None = None
 
 
 class ResultResponse(BaseModel):
