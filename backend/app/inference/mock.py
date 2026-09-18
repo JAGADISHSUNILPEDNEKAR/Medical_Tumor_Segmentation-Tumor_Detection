@@ -95,8 +95,8 @@ class MockInferenceService:
         seg_img.header.set_zooms(spacing)
         nib.save(seg_img, str(seg_path))
 
-        # 6. Compute measurements
-        measurements = self._compute_measurements(brats_mask, spacing)
+        # Measurements and metrics are computed centrally in job_queue.py
+        # after the segmentation artifact is generated.
 
         # 7. Build metadata
         metadata = {
@@ -135,7 +135,6 @@ class MockInferenceService:
 
         return InferenceResult(
             segmentation_path=seg_filename,
-            measurements=measurements,
             metadata=metadata,
         )
 
@@ -208,40 +207,3 @@ class MockInferenceService:
 
         return mask
 
-    def _compute_measurements(
-        self, brats_mask: np.ndarray, spacing: tuple[float, ...]
-    ) -> dict:
-        """Compute deterministic geometric measurements from the BraTS-labeled mask.
-
-        These are synthetic/demo measurements, not clinical values.
-        """
-        voxel_volume_mm3 = float(np.prod(np.array(spacing)))
-
-        # Total foreground
-        foreground_voxels = int(np.sum(brats_mask > 0))
-        foreground_volume_mm3 = round(foreground_voxels * voxel_volume_mm3, 4)
-        foreground_volume_cm3 = round(foreground_volume_mm3 / 1000.0, 6)
-
-        # Per-region
-        regions: dict[str, dict] = {}
-        for label_value, region_name in REGION_NAMES.items():
-            count = int(np.sum(brats_mask == label_value))
-            vol_mm3 = round(count * voxel_volume_mm3, 4)
-            vol_cm3 = round(vol_mm3 / 1000.0, 6)
-            regions[region_name] = {
-                "label": label_value,
-                "voxel_count": count,
-                "volume_mm3": vol_mm3,
-                "volume_cm3": vol_cm3,
-            }
-
-        return {
-            "synthetic": True,
-            "description": "Geometric measurements of the synthetic segmentation mask.",
-            "voxel_spacing_mm": list(spacing),
-            "voxel_volume_mm3": round(voxel_volume_mm3, 6),
-            "foreground_voxels": foreground_voxels,
-            "foreground_volume_mm3": foreground_volume_mm3,
-            "foreground_volume_cm3": foreground_volume_cm3,
-            "regions": regions,
-        }

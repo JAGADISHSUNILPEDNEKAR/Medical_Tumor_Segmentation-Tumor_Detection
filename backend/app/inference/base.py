@@ -21,12 +21,10 @@ class InferenceResult:
 
     Attributes:
         segmentation_path: Relative path to the output segmentation NIfTI.
-        measurements: Deterministic geometric measurements from the mask.
         metadata: Provenance and configuration metadata.
     """
 
     segmentation_path: str
-    measurements: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
