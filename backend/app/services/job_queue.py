@@ -172,12 +172,54 @@ class JobQueue:
 
                 job_svc.update_progress(item.job_id, 80)
                 session.commit()
+                
+                # Load segmentation for measurements
+                import nibabel as nib
+                import numpy as np
+                from app.services.measurement_service import MeasurementService
+                from app.services.metrics_service import MetricsService
+
+                seg_path = paths.output_dir / inference_result.segmentation_path
+                seg_img = nib.load(str(seg_path))
+                seg_data = np.asanyarray(seg_img.dataobj)
+                spacing = tuple(float(z) for z in seg_img.header.get_zooms()[:3])
+
+                measurement_svc = MeasurementService()
+                is_synthetic = inference_result.metadata.get("synthetic", True)
+                desc = inference_result.metadata.get("description")
+                
+                measurements = measurement_svc.compute_measurements(
+                    segmentation=seg_data,
+                    spacing=spacing,
+                    is_synthetic=is_synthetic,
+                    description=desc,
+                )
+                
+                evaluation = None
+                if item.has_ground_truth:
+                    # Try to find the ground truth segmentation
+                    gt_path = paths.input_dir / "seg.nii.gz"
+                    if not gt_path.is_file():
+                        gt_path = paths.input_dir / "seg.nii"
+                        
+                    if gt_path.is_file():
+                        gt_img = nib.load(str(gt_path))
+                        gt_data = np.asanyarray(gt_img.dataobj)
+                        
+                        metrics_svc = MetricsService()
+                        evaluation = metrics_svc.compute_evaluation(
+                            prediction=seg_data,
+                            ground_truth=gt_data,
+                            spacing=spacing,
+                        )
 
                 # Persist result
                 result_svc.create_result(
                     job_id=item.job_id,
                     case_id=item.case_id,
                     inference_result=inference_result,
+                    measurements=measurements,
+                    evaluation=evaluation,
                 )
 
                 # Transition: RUNNING → COMPLETED
