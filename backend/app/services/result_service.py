@@ -14,6 +14,7 @@ from app.inference.base import InferenceResult
 from app.schemas.results import (
     EvaluationInfo,
     MeasurementsInfo,
+    ProvenanceInfo,
     ResultResponse,
     SegmentationInfo,
 )
@@ -32,16 +33,23 @@ class ResultService:
         job_id: str,
         case_id: str,
         inference_result: InferenceResult,
+        measurements: MeasurementsInfo,
+        evaluation: EvaluationInfo | None = None,
     ) -> ResultRecord:
         """Persist a result from a completed inference job."""
         now = datetime.now(timezone.utc)
+        
+        metadata = inference_result.metadata.copy()
+        if evaluation:
+            metadata["evaluation"] = evaluation.model_dump(mode="json")
+            
         result = ResultRecord(
             result_id=str(uuid4()),
             job_id=job_id,
             case_id=case_id,
             segmentation_path=inference_result.segmentation_path,
-            measurements_json=json.dumps(inference_result.measurements, default=str),
-            metadata_json=json.dumps(inference_result.metadata, default=str),
+            measurements_json=measurements.model_dump_json(),
+            metadata_json=json.dumps(metadata, default=str),
             created_at=now,
         )
         self.session.add(result)
@@ -84,29 +92,47 @@ class ResultService:
         )
 
         has_segmentation = bool(result.segmentation_path)
-        is_synthetic = measurements_data.get("synthetic", True)
-        has_ground_truth = metadata_data.get("has_ground_truth", False)
+        
+        try:
+            measurements = MeasurementsInfo.model_validate(measurements_data)
+        except Exception:
+            # Fallback for old records or malformed data
+            measurements = MeasurementsInfo(
+                synthetic=True,
+                description="Failed to parse measurements data",
+                foreground_voxels=measurements_data.get("foreground_voxels", 0),
+                foreground_volume_mm3=measurements_data.get("foreground_volume_mm3", 0.0),
+                foreground_volume_cm3=measurements_data.get("foreground_volume_cm3", 0.0),
+            )
+            
+        eval_data = metadata_data.get("evaluation")
+        if eval_data:
+            try:
+                evaluation = EvaluationInfo.model_validate(eval_data)
+            except Exception:
+                evaluation = EvaluationInfo(available=False)
+        else:
+            evaluation = EvaluationInfo(available=False)
+
+        provenance = ProvenanceInfo(
+            inference_source=metadata_data.get("inference_source", "mock"),
+            model_version=metadata_data.get("model_version"),
+            checkpoint_id=metadata_data.get("checkpoint_id"),
+            synthetic=metadata_data.get("synthetic", True),
+            inference_timestamp=metadata_data.get("inference_timestamp"),
+            description=metadata_data.get("description"),
+        )
 
         return ResultResponse(
             result_id=result.result_id,
             job_id=result.job_id,
             case_id=result.case_id,
             status="COMPLETED",
-            inference_source=metadata_data.get("inference_source", "mock"),
-            model_version=metadata_data.get("model_version"),
+            inference_source=provenance.inference_source,
+            model_version=provenance.model_version,
             segmentation=SegmentationInfo(available=has_segmentation),
-            measurements=MeasurementsInfo(
-                synthetic=is_synthetic,
-                description=measurements_data.get("description"),
-                foreground_voxels=measurements_data.get("foreground_voxels", 0),
-                foreground_volume_mm3=measurements_data.get("foreground_volume_mm3", 0.0),
-                foreground_volume_cm3=measurements_data.get("foreground_volume_cm3", 0.0),
-                regions=measurements_data.get("regions"),
-            ),
-            evaluation=EvaluationInfo(
-                available=False,
-                dice=None,
-                hd95_mm=None,
-            ),
+            measurements=measurements,
+            evaluation=evaluation,
+            provenance=provenance,
             created_at=result.created_at,
         )
