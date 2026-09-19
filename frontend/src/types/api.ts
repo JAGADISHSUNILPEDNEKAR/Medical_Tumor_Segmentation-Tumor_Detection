@@ -109,23 +109,61 @@ export interface JobStatusResponse {
   completed_at: string | null;
 }
 
-/** Per-region volumetrics. Keyed by the backend's human-readable region name. */
 export interface RegionMeasurement {
-  /** BraTS label value (1 = NCR, 2 = ED, 4 = ET). Authoritative for display colour. */
+  region: string;
   label: number;
   voxel_count: number;
   volume_mm3: number;
   volume_cm3: number;
+  present: boolean;
+  bounding_box: { min: number[]; max: number[] } | null;
+  centroid_mm: number[] | null;
 }
 
 export interface Measurements {
-  /** True while results come from MockInferenceService. */
   synthetic: boolean;
-  description: string;
+  description: string | null;
+  voxel_spacing_mm: number[] | null;
+  voxel_volume_mm3: number;
   foreground_voxels: number;
   foreground_volume_mm3: number;
   foreground_volume_cm3: number;
-  regions: Record<string, RegionMeasurement>;
+  regions: RegionMeasurement[] | null;
+}
+
+export interface DiceMetric {
+  value: number;
+  both_empty: boolean;
+}
+
+export interface HD95Metric {
+  value_mm: number | null;
+  defined: boolean;
+  reason: string | null;
+}
+
+export interface PerClassMetrics {
+  class_name: string;
+  label: number;
+  dice: DiceMetric | null;
+  hd95: HD95Metric | null;
+}
+
+export interface EvaluationInfo {
+  available: boolean;
+  ground_truth_available: boolean;
+  per_class: PerClassMetrics[] | null;
+  mean_dice: DiceMetric | null;
+  mean_hd95: HD95Metric | null;
+}
+
+export interface ProvenanceInfo {
+  inference_source: string;
+  model_version: string | null;
+  checkpoint_id: string | null;
+  synthetic: boolean;
+  inference_timestamp: string | null;
+  description: string | null;
 }
 
 export interface ResultResponse {
@@ -137,6 +175,18 @@ export interface ResultResponse {
   model_version: string | null;
   segmentation: { available: boolean };
   measurements: Measurements;
-  evaluation: { available: boolean; dice: number | null; hd95_mm: number | null };
+  evaluation: EvaluationInfo;
+  provenance: ProvenanceInfo | null;
+  created_at: string;
+}
+
+export interface ReportResponse {
+  result_id: string;
+  case_id: string;
+  job_id: string;
+  status: string;
+  measurements: Measurements;
+  evaluation: EvaluationInfo;
+  provenance: ProvenanceInfo;
   created_at: string;
 }
