@@ -61,28 +61,54 @@ function result(): ResultResponse {
       foreground_voxels: 1037,
       foreground_volume_mm3: 2074,
       foreground_volume_cm3: 2.074,
-      regions: {
-        "NCR (Necrotic Core)": {
+      regions: [
+        {
+          region: "NCR (Necrotic Core)",
           label: 1,
           voxel_count: 202,
           volume_mm3: 404,
           volume_cm3: 0.404,
+          present: true,
+          bounding_box: null,
+          centroid_mm: null,
         },
-        "ED (Peritumoral Edema)": {
+        {
+          region: "ED (Peritumoral Edema)",
           label: 2,
           voxel_count: 804,
           volume_mm3: 1608,
           volume_cm3: 1.608,
+          present: true,
+          bounding_box: null,
+          centroid_mm: null,
         },
-        "ET (Enhancing Tumor)": {
+        {
+          region: "ET (Enhancing Tumor)",
           label: 4,
           voxel_count: 31,
           volume_mm3: 62,
           volume_cm3: 0.062,
+          present: true,
+          bounding_box: null,
+          centroid_mm: null,
         },
-      },
+      ],
     },
-    evaluation: { available: false, dice: null, hd95_mm: null },
+    evaluation: { 
+        available: true, 
+        ground_truth_available: true, 
+        mean_dice: { value: 0.85, both_empty: false }, 
+        mean_hd95: { value_mm: 2.1, defined: true, reason: null },
+        per_class: []
+    },
+    provenance: {
+        inference_source: "mock",
+        model_version: null,
+        checkpoint_id: null,
+        synthetic: true,
+        inference_timestamp: "2026-01-01T00:00:01Z",
+        description: null,
+    },
     created_at: "2026-01-01T00:00:02Z",
   };
 }
