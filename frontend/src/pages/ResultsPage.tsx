@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Eye,
   FileX,
+  FileText,
   Loader2,
   TestTube2,
 } from "lucide-react";
@@ -191,6 +192,22 @@ export function ResultsPage() {
                   {job.model_version ?? "Not registered"}
                 </dd>
               </div>
+              {result?.provenance && (
+                <>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-ink-500">Checkpoint ID</dt>
+                    <dd className="font-medium text-ink-700">
+                      {result.provenance.checkpoint_id ?? "N/A"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-ink-500">Timestamp</dt>
+                    <dd className="font-medium text-ink-700">
+                      {result.provenance.inference_timestamp ? new Date(result.provenance.inference_timestamp).toLocaleString() : "N/A"}
+                    </dd>
+                  </div>
+                </>
+              )}
             </dl>
 
             {job.status === "FAILED" && job.error_message && (
@@ -236,10 +253,9 @@ export function ResultsPage() {
                     Regional breakdown
                   </h3>
                   <ul className="space-y-3">
-                    {Object.entries(result.measurements.regions).map(([name, region]) => {
-                      // Colour is keyed off the BraTS label, never the display
-                      // string, so it stays in step with the segmentation viewer.
+                    {result.measurements.regions && result.measurements.regions.map((region) => {
                       const config = REGION_CONFIG[region.label];
+                      const name = region.region;
                       return (
                         <li
                           key={name}
@@ -269,7 +285,51 @@ export function ResultsPage() {
                 </div>
               </div>
 
-              {result.segmentation.available && caseId && (
+              {result.evaluation?.available && (
+                <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-sm font-medium text-ink-500">
+                    Evaluation Metrics (Ground Truth Available)
+                  </h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col rounded-md border border-slate-100 bg-slate-50 p-4">
+                       <p className="text-xs font-semibold text-ink-500 uppercase">Mean Dice Score</p>
+                       <p className="mt-1 text-2xl font-mono text-ink-900">
+                          {result.evaluation.mean_dice ? result.evaluation.mean_dice.value.toFixed(4) : "N/A"}
+                       </p>
+                    </div>
+                    <div className="flex flex-col rounded-md border border-slate-100 bg-slate-50 p-4">
+                       <p className="text-xs font-semibold text-ink-500 uppercase">Mean HD95 (mm)</p>
+                       <p className="mt-1 text-2xl font-mono text-ink-900">
+                          {result.evaluation.mean_hd95 ? result.evaluation.mean_hd95.value_mm?.toFixed(2) : "N/A"}
+                       </p>
+                    </div>
+                  </div>
+                  {result.evaluation.per_class && (
+                     <div className="mt-4 border-t border-slate-100 pt-4">
+                        <table className="w-full text-left text-sm text-ink-700">
+                          <thead>
+                             <tr className="text-ink-500">
+                               <th className="pb-2 font-medium">Class</th>
+                               <th className="pb-2 font-medium">Dice</th>
+                               <th className="pb-2 font-medium">HD95 (mm)</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono">
+                             {result.evaluation.per_class.map((c) => (
+                               <tr key={c.label}>
+                                 <td className="py-2 font-sans font-medium text-ink-900">{c.class_name}</td>
+                                 <td className="py-2">{c.dice ? c.dice.value.toFixed(4) : "N/A"}</td>
+                                 <td className="py-2">{c.hd95?.defined && c.hd95.value_mm != null ? c.hd95.value_mm.toFixed(2) : "N/A"}</td>
+                               </tr>
+                             ))}
+                          </tbody>
+                        </table>
+                     </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => navigate(`/cases/${caseId}/viewer?job=${encodeURIComponent(jobId)}`)}
@@ -278,7 +338,15 @@ export function ResultsPage() {
                   <Eye className="h-5 w-5" aria-hidden />
                   Open medical image viewer
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/cases/${caseId}/jobs/${jobId}/report`)}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white p-4 font-semibold text-ink-700 transition-colors hover:bg-slate-50"
+                >
+                  <FileText className="h-5 w-5" aria-hidden />
+                  View full report
+                </button>
+              </div>
             </section>
           )}
         </>
