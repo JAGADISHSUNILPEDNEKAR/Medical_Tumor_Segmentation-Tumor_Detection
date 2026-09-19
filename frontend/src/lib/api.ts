@@ -4,7 +4,9 @@ import {
   type CaseResponse,
   type HealthResponse,
   type JobStatusResponse,
+  type Measurements,
   type ModelInfoResponse,
+  type ReportResponse,
   type ResultResponse,
 } from "../types/api";
 
@@ -85,6 +87,14 @@ export function fetchJob(jobId: string): Promise<JobStatusResponse> {
 
 export function fetchResult(resultId: string): Promise<ResultResponse> {
   return getJson<ResultResponse>(`/api/v1/results/${encodeURIComponent(resultId)}`);
+}
+
+export function fetchMeasurements(resultId: string): Promise<Measurements> {
+  return getJson<Measurements>(`/api/v1/results/${encodeURIComponent(resultId)}/measurements`);
+}
+
+export function fetchReport(resultId: string): Promise<ReportResponse> {
+  return getJson<ReportResponse>(`/api/v1/results/${encodeURIComponent(resultId)}/report`);
 }
 
 export function uploadCaseFile(
