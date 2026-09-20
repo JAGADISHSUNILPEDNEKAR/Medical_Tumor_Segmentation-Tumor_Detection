@@ -4,7 +4,7 @@ Research / decision-support prototype for BraTS-format brain MRI tumor sub-regio
 
 **This is not a medical device. It is not clinically validated. It must not be used for diagnosis or treatment decisions.**
 
-The trained 3D U-Net is developed in a separate notebook. This repository currently contains **Phase 4**: API health, case creation, four-modality NIfTI upload, spatial validation, isolated storage, async job execution behind a replaceable inference boundary, and in-browser 2D/3D visualization.
+The trained 3D U-Net is developed in a separate notebook. This repository currently contains **Phase 5**: API health, case creation, four-modality NIfTI upload, spatial validation, isolated storage, async job execution behind a replaceable inference boundary, in-browser 2D/3D visualization, volumetric tumor measurements, ground-truth metric evaluation, and diagnostic clinical reports.
 
 **The only inference implementation is `MockInferenceService`**, which synthesizes a geometric ellipsoid mask. No trained checkpoint is loaded and no real prediction is produced. Every screen that shows a result is marked as synthetic.
 
@@ -15,6 +15,14 @@ Built an in-browser MRI visualization suite without relying on external medical 
 - **Multiplanar Slicing**: Extracts and normalizes arbitrary Axial, Coronal, and Sagittal slices natively via HTML Canvas rendering for smooth performance.
 - **3D Tumor Extraction**: A custom marching cubes engine generates lightweight, WebGL-ready triangle meshes directly from the segmentation voxel masks.
 - **Interactive Tooling**: Crosshair synchronization across 2D planes, overlay opacity and per-region visibility, modality toggling (T1, T1ce, T2, FLAIR), keyboard slice step-through, a case metadata panel, and interactive 3D OrbitControls (via `react-three-fiber`).
+
+### Phase 5: Reports, Measurements & Results [✓]
+
+Built a clinical results presentation and quantitative measurement pipeline consuming segmentation results.
+- **Volumetric Extraction**: `MeasurementService` calculates exact physical tumor volumes (cm³ and mm³), voxel counts, 3D axis-aligned bounding boxes, and physical centroids for WT (Whole Tumor), TC (Tumor Core), and ET (Enhancing Tumor) preserving NIfTI affine spacing.
+- **Quantitative Metrics Evaluation**: `MetricsService` computes Dice Similarity Coefficients and 95th-percentile Hausdorff Distance (HD95) using surface boundary extraction via binary erosion, with graceful handling of clinically empty mask edge cases.
+- **Model Provenance**: Explicit tracking of model version, checkpoint identifier, inference timestamp, and synthetic disclaimer flags.
+- **Clinical Report Page**: Dedicated, printable diagnostic report view (`/cases/:caseId/jobs/:jobId/report`) with patient/scan metadata, volumetric summaries, comparative ground-truth evaluation, and non-diagnostic disclaimers.
 
 ## Current status
 
@@ -27,9 +35,9 @@ Built an in-browser MRI visualization suite without relying on external medical 
 | Async job queue + result endpoints | Phase 3 |
 | Mock inference (synthetic, non-clinical) | Phase 3 |
 | 2D multiplanar viewer + 3D tumor mesh | Phase 4 |
-| Measurements UI | Phase 4 (volumes only; report + export are Phase 5) |
+| Measurements UI | Phase 5 (volumetric summary, regional breakdown, printable report) |
 | Real model inference | Not implemented (Phase 6) |
-| Dice / HD95 evaluation | Not implemented (`/evaluate` stores `seg` but computes no metrics) |
+| Dice / HD95 evaluation | Phase 5 (evaluated against ground truth segmentation) |
 
 ## Requirements
 

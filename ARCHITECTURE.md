@@ -1,12 +1,13 @@
-# Architecture — Phase 4
+# Architecture — Phase 5
 
 Research / decision-support prototype. **Not a diagnostic device. Not clinically validated.**
 
 ## Boundary
 
 Training stays in a separate notebook. This application validates and stores BraTS
-NIfTI cases, runs them through a replaceable inference service, and visualizes the
-result. Through Phase 4 the only implementation behind that boundary is
+NIfTI cases, runs them through a replaceable inference service, extracts quantitative
+measurements, evaluates accuracy against ground truth, and visualizes the
+result. Through Phase 5 the only implementation behind that boundary is
 `MockInferenceService`, which synthesizes a geometric mask. **No trained model is
 loaded and no real prediction is produced.**
 
@@ -22,6 +23,8 @@ flowchart LR
     Queue --> Inf[InferenceService protocol]
     Inf --> Mock[MockInferenceService]
     Inf -.-> Real[Phase 6 RealBraTSInferenceService]
+    Queue --> Measure[MeasurementService]
+    Queue --> Metrics[MetricsService]
     Queue --> Res[ResultService]
     Res --> Artifacts[segmentation.nii.gz + result.json]
     FE -->|artifact stream| Artifacts
@@ -35,7 +38,7 @@ The frontend never learns which implementation ran. It sees `inference_source`
 Ingest endpoints create a case, validate it, enqueue a job, and return **202**:
 
 - `POST /api/v1/predict` — four modalities
-- `POST /api/v1/evaluate` — four modalities plus `seg` (Dice/HD95 are **not** computed yet)
+- `POST /api/v1/evaluate` — four modalities plus `seg` (Dice/HD95 computed post-inference)
 
 Upload UX needs per-file progress, so these case endpoints are **additive**
 (not a competing product API):
@@ -47,10 +50,12 @@ Upload UX needs per-file progress, so these case endpoints are **additive**
 - `POST /api/v1/cases/{case_id}/predict` — 202, or 409 if the case is not READY
 - `GET  /api/v1/cases/{case_id}/artifacts/{artifact}` — streams an allowlisted NIfTI
 
-Job and result polling:
+Job, result, and report endpoints:
 
 - `GET /api/v1/jobs/{job_id}` — status, progress, `result_id` when COMPLETED
-- `GET /api/v1/results/{result_id}` — measurements, segmentation availability
+- `GET /api/v1/results/{result_id}` — measurements, evaluation, segmentation availability
+- `GET /api/v1/results/{result_id}/measurements` — granular tumor volumes and bounding boxes
+- `GET /api/v1/results/{result_id}/report` — diagnostic report summary payload
 
 ## Inference boundary
 
