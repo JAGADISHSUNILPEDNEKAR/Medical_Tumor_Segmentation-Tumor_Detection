@@ -4,6 +4,7 @@ import { Layout } from "./components/Layout";
 import { HomePage } from "./pages/HomePage";
 import { UploadPage } from "./pages/UploadPage";
 import { ResultsPage } from "./pages/ResultsPage";
+import { ReportPage } from "./pages/ReportPage";
 import { ViewerPage } from "./pages/ViewerPage";
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/cases/:caseId/jobs/:jobId" element={<ResultsPage />} />
+          <Route path="/cases/:caseId/jobs/:jobId/report" element={<ReportPage />} />
           <Route path="/cases/:caseId/viewer" element={<ViewerPage />} />
         </Route>
       </Routes>
