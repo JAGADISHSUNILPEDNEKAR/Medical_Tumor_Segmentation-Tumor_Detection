@@ -6,5 +6,8 @@ sqlalchemy>=2.0.36,<3.0.0
 nibabel>=5.3.0,<6.0.0
 numpy>=2.0.0,<3.0.0
 scipy>=1.11.0,<2.0.0
+# Phase 6: required by INFERENCE_BACKEND=pytorch. Mock mode does not import it.
+# Install the CPU wheel for development/CI; match the CUDA build to the host for GPU.
+torch>=2.2.0
 pytest>=8.3.0,<9.0.0
 httpx>=0.27.0,<1.0.0
