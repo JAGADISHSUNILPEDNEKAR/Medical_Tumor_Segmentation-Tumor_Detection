@@ -9,14 +9,21 @@ services:
       ENVIRONMENT: development
       LOG_LEVEL: INFO
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      MODEL_PATH: ""
-      MODEL_VERSION: ""
+      # Phase 6: switch to "pytorch" and mount a checkpoint at MODEL_PATH to run
+      # the trained 3D U-Net. Left on "mock" so the stack starts with no model.
+      INFERENCE_BACKEND: "${INFERENCE_BACKEND:-mock}"
+      MODEL_PATH: "${MODEL_PATH:-}"
+      MODEL_VERSION: "${MODEL_VERSION:-}"
+      INFERENCE_DEVICE: "${INFERENCE_DEVICE:-auto}"
       UPLOAD_DIR: /data/uploads
       RESULTS_DIR: /data/results
       DATABASE_URL: sqlite:////data/app.db
       MAX_UPLOAD_SIZE_MB: "500"
     volumes:
       - app-data:/data
+      # Mount the host directory holding best_model.pth read-only, then point
+      # MODEL_PATH at /models/best_model.pth.
+      - ./models:/models:ro
 
   frontend:
     build:
