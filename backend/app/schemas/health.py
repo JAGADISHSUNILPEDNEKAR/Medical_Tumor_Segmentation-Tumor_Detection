@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -25,3 +27,10 @@ class ModelInfoResponse(BaseModel):
     inference_source: str
     model_version: str | None = None
     message: str
+    details: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Backend-reported provenance (architecture, checkpoint, device, "
+            "patch geometry). Measured values only; absent for mock inference."
+        ),
+    )
