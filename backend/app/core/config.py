@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     model_path: str | None = None
     model_version: str | None = None
+
+    # ── Inference backend (Phase 6) ──────────────────────────────────────────
+    # "mock"    -> MockInferenceService (synthetic geometry, no checkpoint)
+    # "pytorch" -> RealBraTSInferenceService (requires MODEL_PATH)
+    inference_backend: str = "mock"
+    # "auto" resolves to CUDA when torch reports a device, otherwise CPU.
+    inference_device: str = "auto"
+    # Refuse a checkpoint whose recorded model/patch/preprocessing fingerprint
+    # differs from the one this service reconstructs. Turning this off does NOT
+    # relax state_dict loading, which is always strict.
+    inference_strict_fingerprint: bool = True
     upload_dir: str = "./data/uploads"
     results_dir: str = "./data/results"
     max_upload_size_mb: int = 500
