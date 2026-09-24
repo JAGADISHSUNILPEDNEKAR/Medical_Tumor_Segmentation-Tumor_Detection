@@ -1,11 +1,21 @@
 """Production inference boundary.
 
 The web application must call this interface only. Concrete implementations
-(MockInferenceService, RealBraTSInferenceService) are added in later phases.
+live beside it:
 
-The InferenceResult contract is designed to be future-proof:
-additional metadata fields (checkpoint_id, preprocessing_version, etc.)
-can be added without breaking the API.
+    MockInferenceService        — Phase 3, synthetic geometric mask
+    RealBraTSInferenceService   — Phase 6, trained 3D U-Net
+    UnavailableInferenceService — a configured real backend that failed to load
+
+The `InferenceResult` contract is designed to be future-proof: additional
+metadata fields (checkpoint_id, preprocessing_version, …) can be added without
+breaking the API.
+
+`InferenceService` stays a method-only Protocol so `runtime_checkable`
+`isinstance` keeps working on every supported Python. The provenance
+attributes implementations also carry (`inference_source`, `model_loaded`,
+`available`, `synthetic`) are read through the accessor helpers below, which
+fall back to conservative defaults for any implementation that omits them.
 """
 
 from __future__ import annotations
@@ -30,11 +40,7 @@ class InferenceResult:
 
 @runtime_checkable
 class InferenceService(Protocol):
-    """Protocol for all inference implementations.
-
-    Phase 3: MockInferenceService
-    Future:  RealBraTSInferenceService
-    """
+    """Protocol for all inference implementations."""
 
     def predict(
         self,
@@ -53,6 +59,36 @@ class InferenceService(Protocol):
             has_ground_truth: Whether a ground-truth seg file exists.
 
         Returns:
-            InferenceResult with segmentation path, measurements, and metadata.
+            InferenceResult with segmentation path and metadata.
         """
         ...
+
+
+def inference_source_of(service: object) -> str:
+    """`mock`, `pytorch`, or `unavailable`. Never guessed from configuration."""
+    return str(getattr(service, "inference_source", "unavailable"))
+
+
+def model_loaded_of(service: object) -> bool:
+    """True only when a real trained checkpoint was actually loaded."""
+    return bool(getattr(service, "model_loaded", False))
+
+
+def is_available(service: object) -> bool:
+    """False when the configured backend could not be brought up."""
+    return bool(getattr(service, "available", True))
+
+
+def model_version_of(service: object) -> str | None:
+    version = getattr(service, "model_version", None)
+    return str(version) if version else None
+
+
+def describe_service(service: object) -> dict[str, Any]:
+    """Provenance payload for GET /model/info, if the service supplies one."""
+    describe = getattr(service, "describe", None)
+    if callable(describe):
+        described = describe()
+        if isinstance(described, dict):
+            return described
+    return {}
