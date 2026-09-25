@@ -40,6 +40,11 @@ from app.inference.base import InferenceResult
 
 logger = logging.getLogger(__name__)
 
+_MOCK_MODEL_INFO_MESSAGE = (
+    "No trained checkpoint is registered. Mock inference is available for "
+    "pipeline validation. Headline Dice/HD95 metrics are not available."
+)
+
 
 class MockInferenceService:
     """Deterministic synthetic inference for pipeline validation.
@@ -47,6 +52,24 @@ class MockInferenceService:
     This service conforms to the InferenceService protocol.
     It does NOT perform real tumor detection.
     """
+
+    # Provenance, read by the API through app.inference.base's accessors.
+    # `model_loaded` stays False: no checkpoint is ever loaded here, and
+    # /health must never claim otherwise.
+    inference_source = "mock"
+    synthetic = True
+    model_loaded = False
+    available = True
+    model_version = None
+
+    def describe(self) -> dict[str, object]:
+        return {
+            "inference_source": self.inference_source,
+            "model_loaded": False,
+            "model_version": None,
+            "checkpoint_id": None,
+            "message": _MOCK_MODEL_INFO_MESSAGE,
+        }
 
     def predict(
         self,
