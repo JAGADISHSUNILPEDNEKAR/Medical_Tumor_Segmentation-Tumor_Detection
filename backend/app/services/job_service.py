@@ -26,8 +26,20 @@ class JobService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def create_job(self, case_id: str, job_type: JobType) -> JobRecord:
-        """Persist a new QUEUED job."""
+    def create_job(
+        self,
+        case_id: str,
+        job_type: JobType,
+        *,
+        inference_source: str = "mock",
+        model_version: str | None = None,
+    ) -> JobRecord:
+        """Persist a new QUEUED job.
+
+        `inference_source` and `model_version` are recorded from the backend
+        that is actually registered in this process, so a job row never claims
+        PyTorch inference for a synthetic result or vice versa.
+        """
         now = datetime.now(timezone.utc)
         job = JobRecord(
             job_id=str(uuid4()),
@@ -36,8 +48,8 @@ class JobService:
             status=JobStatus.QUEUED.value,
             created_at=now,
             progress=0,
-            inference_source="mock",
-            model_version=None,
+            inference_source=inference_source,
+            model_version=model_version,
         )
         self.session.add(job)
         self.session.flush()
@@ -47,7 +59,7 @@ class JobService:
                 "job_id": job.job_id,
                 "case_id": case_id,
                 "job_type": job_type.value,
-                "inference_source": "mock",
+                "inference_source": inference_source,
             },
         )
         return job
