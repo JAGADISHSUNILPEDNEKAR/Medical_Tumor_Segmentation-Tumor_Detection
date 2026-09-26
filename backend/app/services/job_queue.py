@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from app.core.constants import ErrorCode, JobStatus, JobType
 from app.db.session import SessionLocal
-from app.inference.base import InferenceService
+from app.inference.base import InferenceService, inference_source_of
 from app.services.job_service import JobService
 from app.services.result_service import ResultService
 from app.storage.filesystem import CaseStorage
@@ -31,6 +31,25 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+def _failure_message(inference_source: str) -> str:
+    """User-facing failure text that names the backend that actually ran."""
+    if inference_source == "pytorch":
+        return (
+            "Inference failed. The trained model could not produce a "
+            "segmentation for this case. No result was stored. This is not a "
+            "clinical result."
+        )
+    if inference_source == "mock":
+        return (
+            "Mock inference failed. The synthetic segmentation could not "
+            "be generated. This is not a clinical result."
+        )
+    return (
+        "Inference is not available on this server, so no segmentation was "
+        "produced. This is not a clinical result."
+    )
 
 
 class JobQueue:
@@ -226,18 +245,21 @@ class JobQueue:
                 job_svc.complete_job(item.job_id)
                 session.commit()
 
-            except Exception as exc:
+            except Exception:
                 session.rollback()
-                # Persist failure — safe user-facing message
-                safe_message = (
-                    "Mock inference failed. The synthetic segmentation could not "
-                    "be generated. This is not a clinical result."
+                # Persist failure — safe user-facing message, never a traceback
+                # and never a filesystem path.
+                safe_message = _failure_message(
+                    inference_source_of(self._inference_service)
                 )
                 logger.exception(
                     "job_inference_failed",
                     extra={
                         "job_id": item.job_id,
                         "case_id": item.case_id,
+                        "inference_source": inference_source_of(
+                            self._inference_service
+                        ),
                     },
                 )
                 try:
