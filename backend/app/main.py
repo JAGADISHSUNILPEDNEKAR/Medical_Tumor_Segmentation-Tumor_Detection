@@ -13,7 +13,7 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestIdMiddleware
 from app.db.session import configure_database
-from app.inference.mock import MockInferenceService
+from app.inference.factory import build_inference_service
 from app.services.job_queue import JobQueue
 
 
@@ -23,7 +23,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     upload_root = Path(settings.upload_dir).resolve()
 
-    inference_service = MockInferenceService()
+    # Built once per process: the checkpoint is loaded at startup and every
+    # job reuses the same in-memory model. A real backend that cannot load
+    # yields an UnavailableInferenceService rather than aborting startup, so
+    # /health can report the problem instead of the API failing to come up.
+    inference_service = build_inference_service(settings)
     queue = JobQueue(inference_service, upload_root)
 
     app.state.job_queue = queue
@@ -46,10 +50,11 @@ def create_app() -> FastAPI:
         title="Medical Tumor Segmentation API",
         description=(
             "Research / decision-support prototype. Not a diagnostic device. "
-            "Not clinically validated. Phase 3 provides mock inference with "
-            "async job execution and synthetic segmentation."
+            "Not clinically validated. Inference runs through a configurable "
+            "backend: INFERENCE_BACKEND=mock produces a synthetic segmentation, "
+            "INFERENCE_BACKEND=pytorch runs the trained 3D U-Net checkpoint."
         ),
-        version="0.3.0",
+        version="0.6.0",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
