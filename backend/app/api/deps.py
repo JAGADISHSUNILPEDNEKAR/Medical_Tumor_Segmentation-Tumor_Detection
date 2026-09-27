@@ -33,3 +33,13 @@ def get_result_service(
 def get_job_queue(request: Request) -> JobQueue:
     """Retrieve the process-local job queue from app state."""
     return request.app.state.job_queue
+
+
+def get_inference_service(request: Request):
+    """Retrieve the process-local inference backend from app state.
+
+    Routes use this only to read provenance (which backend is registered,
+    whether a checkpoint actually loaded) — never to run inference inline.
+    Inference always goes through the job queue.
+    """
+    return request.app.state.inference_service
