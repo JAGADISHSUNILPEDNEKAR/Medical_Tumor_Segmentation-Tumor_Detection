@@ -1,4 +1,4 @@
-# Architecture — Phase 5
+# Architecture — Phase 6
 
 Research / decision-support prototype. **Not a diagnostic device. Not clinically validated.**
 
@@ -7,9 +7,13 @@ Research / decision-support prototype. **Not a diagnostic device. Not clinically
 Training stays in a separate notebook. This application validates and stores BraTS
 NIfTI cases, runs them through a replaceable inference service, extracts quantitative
 measurements, evaluates accuracy against ground truth, and visualizes the
-result. Through Phase 5 the only implementation behind that boundary is
-`MockInferenceService`, which synthesizes a geometric mask. **No trained model is
-loaded and no real prediction is produced.**
+result.
+
+Two implementations sit behind that boundary, selected by `INFERENCE_BACKEND`:
+`MockInferenceService` (synthetic geometric mask, no checkpoint) and
+`RealBraTSInferenceService` (the trained 3D U-Net from the notebook). See
+[docs/Phase6_Real_Inference.md](docs/Phase6_Real_Inference.md) for the
+notebook→production parity table and the configuration reference.
 
 ```mermaid
 flowchart LR
@@ -22,7 +26,8 @@ flowchart LR
     BE --> Queue[JobQueue single worker]
     Queue --> Inf[InferenceService protocol]
     Inf --> Mock[MockInferenceService]
-    Inf -.-> Real[Phase 6 RealBraTSInferenceService]
+    Inf --> Real[RealBraTSInferenceService]
+    Real --> Ckpt[(best_model.pth)]
     Queue --> Measure[MeasurementService]
     Queue --> Metrics[MetricsService]
     Queue --> Res[ResultService]
@@ -31,7 +36,8 @@ flowchart LR
 ```
 
 The frontend never learns which implementation ran. It sees `inference_source`
-(`mock` today, `pytorch` later) and an artifact URL.
+(`mock`, `pytorch`, or `unavailable`) and an artifact URL. No frontend file
+changed in Phase 6.
 
 ## Public API
 
@@ -60,12 +66,23 @@ Job, result, and report endpoints:
 ## Inference boundary
 
 `backend/app/inference/base.py` defines the `InferenceService` protocol and the
-`InferenceResult` dataclass. Swapping in a real model means adding one class that
-satisfies the protocol and changing the construction site in `main.py`'s lifespan.
-No route, schema, or frontend change is required.
+`InferenceResult` dataclass. `app/inference/factory.py` maps `INFERENCE_BACKEND`
+to an implementation and is the single construction site, called from
+`main.py`'s lifespan. PyTorch is imported only on the `pytorch` path, so mock
+mode runs on a host with no torch installed.
+
+`RealBraTSInferenceService` loads its checkpoint once at startup and every job
+reuses that in-memory model. If the checkpoint is missing, corrupt, or
+architecturally incompatible, startup still succeeds but installs
+`UnavailableInferenceService`: `/health` reports `model_loaded: false` and
+`inference_source: "unavailable"`, and the ingest endpoints return
+**503 `MODEL_UNAVAILABLE`** rather than accepting doomed jobs or silently
+falling back to synthetic output.
 
 Execution runs through `JobQueue`: an in-process asyncio FIFO with a **single**
-worker, so two cases can never contend for the same GPU. Documented limits: the
+worker, so two cases can never contend for the same GPU. Phase 6 added no
+parallelism — real inference runs in a thread executor off the event loop,
+strictly one case at a time. Documented limits: the
 queue is process-local (it does not coordinate across replicas), queued items are
 lost on crash while the DB row stays QUEUED/RUNNING, and there is no retry.
 
