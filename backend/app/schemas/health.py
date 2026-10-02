@@ -26,6 +26,11 @@ class ModelInfoResponse(BaseModel):
     model_loaded: bool
     inference_source: str
     model_version: str | None = None
+    compat_fingerprint: str | None = Field(default=None, description="Model compatibility fingerprint")
+    parameter_count: int | None = Field(default=None, description="Number of model parameters")
+    backend: str | None = Field(default=None, description="Inference backend used")
+    patch_size: list[int] | None = Field(default=None, description="Inference patch size")
+    device: str | None = Field(default=None, description="Compute device used")
     message: str
     details: dict[str, Any] | None = Field(
         default=None,
