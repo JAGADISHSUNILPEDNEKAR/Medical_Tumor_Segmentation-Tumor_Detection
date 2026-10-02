@@ -17,6 +17,26 @@ class Settings(BaseSettings):
         protected_namespaces=(),
     )
 
+    from pydantic import model_validator
+    
+    @model_validator(mode="after")
+    def _validate_startup_config(self) -> "Settings":
+        if self.inference_backend.lower() == "pytorch":
+            if not self.model_path:
+                raise ValueError("INFERENCE_BACKEND=pytorch requires MODEL_PATH to be set")
+            p = Path(self.model_path)
+            if not p.is_absolute():
+                # Resolve relative to repo root since that's where we usually run from
+                p = (_REPO_DIR / p).resolve()
+            if not p.exists():
+                raise ValueError(f"MODEL_PATH {self.model_path} does not exist")
+                
+        # Validate concurrent jobs vs workers constraint
+        if self.max_concurrent_jobs > self.inference_workers:
+            raise ValueError(f"MAX_CONCURRENT_JOBS ({self.max_concurrent_jobs}) cannot exceed INFERENCE_WORKERS ({self.inference_workers})")
+        
+        return self
+
     environment: str = "development"
     log_level: str = "INFO"
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
@@ -35,8 +55,14 @@ class Settings(BaseSettings):
     inference_strict_fingerprint: bool = True
     upload_dir: str = "./data/uploads"
     results_dir: str = "./data/results"
+    temp_dir: str = "./data/tmp"
     max_upload_size_mb: int = 500
     database_url: str = "sqlite:///./data/app.db"
+    
+    # Phase 7 concurrency and reliability
+    inference_workers: int = 1
+    max_concurrent_jobs: int = 1
+    job_timeout_seconds: int = 600
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -45,6 +71,10 @@ class Settings(BaseSettings):
     @property
     def model_registered(self) -> bool:
         return bool(self.model_path and self.model_path.strip())
+
+    @property
+    def is_pytorch(self) -> bool:
+        return self.inference_backend.lower() == "pytorch"
 
 
 @lru_cache

@@ -43,8 +43,18 @@ def create_app() -> FastAPI:
     configure_logging(settings.log_level)
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.results_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
     _ensure_sqlite_parent(settings.database_url)
     configure_database(settings.database_url)
+    
+    import logging
+    logging.getLogger(__name__).info(
+        "app_startup_config",
+        extra={
+            "backend": settings.inference_backend,
+            "device": settings.inference_device,
+        }
+    )
 
     app = FastAPI(
         title="Medical Tumor Segmentation API",
@@ -54,7 +64,7 @@ def create_app() -> FastAPI:
             "backend: INFERENCE_BACKEND=mock produces a synthetic segmentation, "
             "INFERENCE_BACKEND=pytorch runs the trained 3D U-Net checkpoint."
         ),
-        version="0.6.0",
+        version="0.7.0",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
