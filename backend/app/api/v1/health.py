@@ -64,6 +64,11 @@ def get_model_info(service=Depends(get_inference_service)) -> ModelInfoResponse:
         model_loaded=model_loaded,
         inference_source=inference_source_of(service),
         model_version=model_version_of(service),
+        compat_fingerprint=described.get("service_compat_fingerprint"),
+        parameter_count=described.get("parameters"),
+        backend=described.get("inference_source"),
+        patch_size=described.get("patch_size"),
+        device=described.get("device"),
         message=message,
         details=described or None,
     )
