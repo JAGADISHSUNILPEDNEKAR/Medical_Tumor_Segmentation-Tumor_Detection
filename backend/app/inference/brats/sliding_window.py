@@ -16,6 +16,7 @@ Geometry, taken from the notebook and not assumed:
 
 from __future__ import annotations
 
+import gc
 import itertools
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -150,6 +151,9 @@ def sliding_window_infer(
             # Drop device tensors before the next tile so peak memory stays at
             # one patch, not one patch per tile.
             del patch_t, logits, probs
+            
+            if device.type == "cpu":
+                gc.collect()
 
     if not (weight_map > 0).all():
         raise RuntimeError(
