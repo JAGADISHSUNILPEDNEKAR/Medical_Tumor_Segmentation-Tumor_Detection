@@ -22,6 +22,7 @@ Pipeline (each step is the notebook's, see `app/inference/brats/`):
 
 from __future__ import annotations
 
+import gc
 import json
 import logging
 import time
@@ -207,6 +208,10 @@ class RealBraTSInferenceService:
             "preprocessing": PREPROCESSING_DESCRIPTION,
             "service_compat_fingerprint": checkpoint_compat_fingerprint(self.config),
         }
+        if self._device is not None and self._device.type == "cuda":
+            description["gpu_name"] = torch.cuda.get_device_name(self._device)
+            description["gpu_memory_total_bytes"] = torch.cuda.get_device_properties(self._device).total_memory
+        
         if self._model_load_seconds is not None:
             description["model_load_seconds"] = round(self._model_load_seconds, 3)
         if info is not None:
@@ -333,6 +338,10 @@ class RealBraTSInferenceService:
             },
         )
         self._release_device_memory()
+        
+        # Free memory aggressively on CPU (where empty_cache is a no-op)
+        if self._device is None or self._device.type == "cpu":
+            gc.collect()
 
         return InferenceResult(
             segmentation_path=seg_path.name,
