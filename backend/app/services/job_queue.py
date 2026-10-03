@@ -17,8 +17,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from app.core.config import get_settings
 
 from app.core.constants import ErrorCode, JobStatus, JobType
 from app.db.session import SessionLocal
@@ -67,13 +70,31 @@ class JobQueue:
         inference_service: InferenceService,
         upload_root: Path,
     ) -> None:
+        self._settings = get_settings()
         self._inference_service = inference_service
         self._upload_root = upload_root
-        self._queue: asyncio.Queue[_JobItem] = asyncio.Queue()
+        # Limit queue depth to prevent memory exhaustion from queued jobs
+        self._queue: asyncio.Queue[_JobItem] = asyncio.Queue(maxsize=100)
         self._worker_task: asyncio.Task[None] | None = None
+        # Guarantee single-GPU safety even if multiple workers are spawned
+        self._inference_lock = threading.Lock()
 
     async def start(self) -> None:
         """Start the single worker coroutine."""
+        # Recover any stale jobs from a previous crash
+        session = SessionLocal()
+        try:
+            job_svc = JobService(session)
+            recovered = job_svc.recover_stale_jobs()
+            if recovered > 0:
+                session.commit()
+                logger.info("job_queue_recovered_stale_jobs", extra={"count": recovered})
+        except Exception:
+            session.rollback()
+            logger.exception("job_queue_recovery_failed")
+        finally:
+            session.close()
+
         self._worker_task = asyncio.create_task(self._worker(), name="job_queue_worker")
         logger.info("job_queue_started")
 
@@ -105,7 +126,11 @@ class JobQueue:
             job_type=job_type,
             has_ground_truth=has_ground_truth,
         )
-        self._queue.put_nowait(item)
+        try:
+            self._queue.put_nowait(item)
+        except asyncio.QueueFull:
+            logger.error("job_queue_full", extra={"job_id": job_id})
+            raise RuntimeError("Inference queue is full. Try again later.")
         logger.info(
             "job_enqueued",
             extra={
@@ -139,10 +164,27 @@ class JobQueue:
 
     async def _execute_job(self, item: _JobItem) -> None:
         """Execute a single job: transition → infer → persist result."""
-        # Run the blocking inference in a thread so we don't block the event loop
-        await asyncio.get_event_loop().run_in_executor(
-            None, self._execute_job_sync, item
-        )
+        timeout = self._settings.job_timeout_seconds
+        try:
+            # Run the blocking inference in a thread so we don't block the event loop
+            await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, self._execute_job_sync, item
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.error("job_timeout", extra={"job_id": item.job_id, "timeout": timeout})
+            # Attempt to mark it failed in the DB
+            session = SessionLocal()
+            try:
+                job_svc = JobService(session)
+                job_svc.fail_job(item.job_id, ErrorCode.INFERENCE_FAILED, "Job timed out.")
+                session.commit()
+            except Exception:
+                session.rollback()
+            finally:
+                session.close()
 
     def _execute_job_sync(self, item: _JobItem) -> None:
         """Synchronous job execution with its own DB session."""
@@ -182,12 +224,13 @@ class JobQueue:
                 job_svc.update_progress(item.job_id, 30)
                 session.commit()
 
-                inference_result = self._inference_service.predict(
-                    case_dir=paths.input_dir,
-                    output_dir=paths.output_dir,
-                    case_id=item.case_id,
-                    has_ground_truth=item.has_ground_truth,
-                )
+                with self._inference_lock:
+                    inference_result = self._inference_service.predict(
+                        case_dir=paths.input_dir,
+                        output_dir=paths.output_dir,
+                        case_id=item.case_id,
+                        has_ground_truth=item.has_ground_truth,
+                    )
 
                 job_svc.update_progress(item.job_id, 80)
                 session.commit()
@@ -244,6 +287,26 @@ class JobQueue:
                 # Transition: RUNNING → COMPLETED
                 job_svc.complete_job(item.job_id)
                 session.commit()
+                
+                # Emit Phase 7 structured observability summary
+                logger.info(
+                    "job_completed_summary",
+                    extra={
+                        "job_id": item.job_id,
+                        "case_id": item.case_id,
+                        "inference_backend": inference_source_of(self._inference_service),
+                        "model_version": inference_result.metadata.get("model_version"),
+                        "checkpoint_id": inference_result.metadata.get("checkpoint_id"),
+                        "device": inference_result.metadata.get("device"),
+                        "input_shape": inference_result.metadata.get("input_shape"),
+                        "patch_size": inference_result.metadata.get("patch_size"),
+                        "num_patches": inference_result.metadata.get("num_patches"),
+                        "preprocess_seconds": inference_result.metadata.get("preprocess_seconds"),
+                        "inference_seconds": inference_result.metadata.get("inference_seconds"),
+                        "total_seconds": inference_result.metadata.get("total_seconds"),
+                        "status": "COMPLETED",
+                    },
+                )
 
             except Exception:
                 session.rollback()
@@ -277,6 +340,7 @@ class JobQueue:
                     session.rollback()
 
         finally:
+            storage.cleanup_temp_files(item.case_id)
             session.close()
 
 
