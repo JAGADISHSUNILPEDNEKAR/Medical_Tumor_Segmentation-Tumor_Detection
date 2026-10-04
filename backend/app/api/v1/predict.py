@@ -10,6 +10,7 @@ from app.api.deps import (
 from app.core.constants import CaseStatus, ErrorCode, JobType, REQUIRED_MODALITIES
 from app.core.errors import AppError
 from app.db.session import get_session
+from app.core.config import get_settings
 from app.inference.base import (
     inference_source_of,
     is_available,
@@ -202,6 +203,37 @@ async def _ingest_and_enqueue(
             f"Required modality '{missing[0].upper()}' is missing.",
             status_code=400,
         )
+
+    # 1.5 Validate file size and basic content signature before saving
+    settings = get_settings()
+    max_size_bytes = settings.max_upload_size_mb * 1024 * 1024
+    total_size = 0
+    for upload in files.values():
+        if not upload:
+            continue
+        
+        # Size check
+        upload.file.seek(0, 2)
+        total_size += upload.file.tell()
+        upload.file.seek(0)
+        
+        if total_size > max_size_bytes:
+            raise AppError(
+                ErrorCode.CASE_TOO_LARGE,
+                f"Total upload size exceeds maximum allowed ({settings.max_upload_size_mb} MB).",
+                status_code=413,
+            )
+            
+        # Basic magic bytes sniff for gzip (.nii.gz)
+        if upload.filename and upload.filename.endswith(".gz"):
+            magic = upload.file.read(2)
+            upload.file.seek(0)
+            if magic != b"\x1f\x8b":
+                raise AppError(
+                    ErrorCode.INVALID_NIFTI,
+                    f"File {upload.filename} claims to be gzip but has invalid magic bytes.",
+                    status_code=422,
+                )
 
     # 2. Create case and upload files
     case = service.create_case()
