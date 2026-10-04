@@ -63,6 +63,21 @@ class CaseStorage:
         serialized = json.dumps(payload, indent=2, default=str)
         paths.metadata_file.write_text(serialized, encoding="utf-8")
 
+    def cleanup_temp_files(self, case_id: str) -> None:
+        """Remove any temporary files left in the case directory."""
+        try:
+            paths = self.paths_for(case_id)
+            if not paths.root.exists():
+                return
+            for f in paths.output_dir.iterdir():
+                if f.is_file() and f.name.endswith(".tmp"):
+                    f.unlink(missing_ok=True)
+            for f in paths.input_dir.iterdir():
+                if f.is_file() and f.name.endswith(".tmp"):
+                    f.unlink(missing_ok=True)
+        except Exception:
+            pass # Best effort
+
     def resolve_artifact(self, case_id: str, artifact: str) -> Path:
         """Resolve an allowlisted viewer artifact inside the case directory.
 
