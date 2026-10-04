@@ -171,6 +171,27 @@ class JobService:
         job.progress = min(max(progress, 0), 100)
         self.session.flush()
 
+    def recover_stale_jobs(self) -> int:
+        """Find any jobs stuck in QUEUED or RUNNING and fail them."""
+        stale_jobs = self.session.query(JobRecord).filter(
+            JobRecord.status.in_([JobStatus.QUEUED.value, JobStatus.RUNNING.value])
+        ).all()
+        count = 0
+        now = datetime.now(timezone.utc)
+        for job in stale_jobs:
+            job.status = JobStatus.FAILED.value
+            job.error_code = ErrorCode.INVALID_JOB_STATE
+            job.error_message = "Job was abandoned due to process restart."
+            job.completed_at = now
+            count += 1
+            logger.warning(
+                "job_recovered_as_failed",
+                extra={"job_id": job.job_id, "case_id": job.case_id},
+            )
+        if count > 0:
+            self.session.flush()
+        return count
+
     def to_response(self, job: JobRecord) -> JobStatusResponse:
         """Convert a JobRecord to an API response."""
         result_id: str | None = None
