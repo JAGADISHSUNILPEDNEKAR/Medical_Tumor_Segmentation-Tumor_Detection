@@ -56,4 +56,5 @@ def get_case_artifact(
         media_type=media_type,
         filename=path.name,
         content_disposition_type="inline",
+        headers={"X-Content-Type-Options": "nosniff"},
     )
