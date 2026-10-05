@@ -20,6 +20,17 @@ COPY backend/scripts /app/scripts
 
 COPY backend/app /app/app
 
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+# The upload/results directories will be mounted as a volume at /data, 
+# but we create them here with permissions so the appuser can write to them 
+# even if the volume mount fails or is empty initially.
+RUN mkdir -p /data/uploads /data/results /data/tmp /models && chown -R appuser:appuser /app /data /models
+
+USER appuser
+
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
