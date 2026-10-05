@@ -15,10 +15,24 @@ services:
       MODEL_PATH: "${MODEL_PATH:-}"
       MODEL_VERSION: "${MODEL_VERSION:-}"
       INFERENCE_DEVICE: "${INFERENCE_DEVICE:-auto}"
+      INFERENCE_WORKERS: "1"
+      MAX_CONCURRENT_JOBS: "1"
+      JOB_TIMEOUT_SECONDS: "600"
       UPLOAD_DIR: /data/uploads
       RESULTS_DIR: /data/results
+      TEMP_DIR: /data/tmp
       DATABASE_URL: sqlite:////data/app.db
       MAX_UPLOAD_SIZE_MB: "500"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     volumes:
       - app-data:/data
       # Mount the host directory holding best_model.pth read-only, then point
@@ -33,8 +47,10 @@ services:
         VITE_API_URL: ""
     ports:
       - "3000:80"
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   app-data:
