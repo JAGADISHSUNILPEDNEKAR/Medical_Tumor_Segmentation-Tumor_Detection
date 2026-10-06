@@ -59,28 +59,21 @@ def test_unknown_backend_is_unavailable_not_silently_mock() -> None:
 
 
 def test_pytorch_backend_without_a_checkpoint_is_unavailable() -> None:
-    service = build_inference_service(
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError) as exc:
         make_settings(inference_backend="pytorch", model_path=None)
-    )
-    assert isinstance(service, UnavailableInferenceService)
-    assert "MODEL_PATH" in service.reason
-    assert service.model_loaded is False
+    assert "requires MODEL_PATH" in str(exc.value)
 
 
 def test_pytorch_backend_with_a_missing_checkpoint_is_unavailable(
     tmp_path: Path,
 ) -> None:
-    service = build_inference_service(
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError) as exc:
         make_settings(
             inference_backend="pytorch", model_path=str(tmp_path / "nope.pth")
         )
-    )
-    assert isinstance(service, UnavailableInferenceService)
-    assert service.model_loaded is False
-    assert service.available is False
-    # On a host without torch the factory stops earlier, at the import; both
-    # paths are legitimate unavailable states and both must carry a reason.
-    assert service.reason
+    assert "does not exist" in str(exc.value)
 
 
 def test_pytorch_backend_with_a_corrupt_checkpoint_is_unavailable(
@@ -108,7 +101,11 @@ def test_unavailable_reason_never_leaks_the_checkpoint_path(tmp_path: Path) -> N
     """MODEL_PATH is a server path; it must not reach an HTTP client."""
     pytest.importorskip("torch")
     secret_path = tmp_path / "very" / "private" / "best_model.pth"
+    # Create the fake secret path so config validation passes
+    secret_path.parent.mkdir(parents=True, exist_ok=True)
+    secret_path.touch()
 
+    # But make it unreadable/corrupt so the backend fails to load
     service = build_inference_service(
         make_settings(inference_backend="pytorch", model_path=str(secret_path))
     )
