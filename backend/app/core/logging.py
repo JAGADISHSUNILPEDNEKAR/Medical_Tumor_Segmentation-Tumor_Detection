@@ -44,6 +44,15 @@ _LOGGED_EXTRA_FIELDS: tuple[str, ...] = (
     "num_patches",
     "transition",
     "queue_size",
+    # Phase 7
+    "input_shape",
+    "patch_size",
+    "preprocess_seconds",
+    "postprocess_seconds",
+    "total_seconds",
+    "status",
+    "count",
+    "timeout",
 )
 
 
