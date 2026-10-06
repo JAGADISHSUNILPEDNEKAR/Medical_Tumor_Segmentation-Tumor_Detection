@@ -111,21 +111,27 @@ def test_health_reports_unavailable_when_a_checkpoint_cannot_load(
     monkeypatch.setenv("RESULTS_DIR", str(tmp_path / "results"))
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'bad.db'}")
     monkeypatch.setenv("INFERENCE_BACKEND", "pytorch")
-    monkeypatch.setenv("MODEL_PATH", str(tmp_path / "missing.pth"))
+
+    # Needs a real file to pass Phase 7 startup validation
+    missing = tmp_path / "missing.pth"
+    missing.write_bytes(b"corrupt")
+    monkeypatch.setenv("MODEL_PATH", str(missing))
+
     get_settings.cache_clear()
 
     from app.main import create_app
 
     with TestClient(create_app()) as client:
-        health = client.get("/api/v1/health").json()
-        assert health["model_loaded"] is False
-        assert health["inference_source"] == "unavailable"
+        response = client.get("/api/v1/health")
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["model_loaded"] is False
+        assert data["inference_source"] == "unavailable"
 
         info = client.get("/api/v1/model/info").json()
         assert info["model_loaded"] is False
         assert "could not be loaded" in info["message"]
 
-        # And it must refuse work rather than queue a job doomed to fail.
         response = client.post("/api/v1/cases")
         case_id = response.json()["case_id"]
         predict = client.post(f"/api/v1/cases/{case_id}/predict")
