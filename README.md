@@ -4,14 +4,26 @@ Research / decision-support prototype for BraTS-format brain MRI tumor sub-regio
 
 **This is not a medical device. It is not clinically validated. It must not be used for diagnosis or treatment decisions.**
 
-The 3D U-Net is trained in a separate notebook. This repository contains **Phase 6**: API health, case creation, four-modality NIfTI upload, spatial validation, isolated storage, async job execution behind a replaceable inference boundary, in-browser 2D/3D visualization, volumetric tumor measurements, ground-truth metric evaluation, diagnostic clinical reports, and **real PyTorch inference with the trained 3D U-Net**.
+The 3D U-Net is trained in a separate notebook. This repository contains **Phase 7**: Production Hardening & Security. Building on Phase 6's verified ML parity, Phase 7 adds robust configuration, CPU/GPU resource management, single-worker GPU inference locks, memory bounds, path traversal prevention, artifact validation, and production Docker infrastructure.
 
 Two inference backends are selectable at runtime via `INFERENCE_BACKEND`:
 
 - `mock` (default) — `MockInferenceService` synthesizes a geometric ellipsoid mask. No checkpoint, no PyTorch. Every screen that shows such a result is marked synthetic.
 - `pytorch` — `RealBraTSInferenceService` runs the trained checkpoint. Results carry `inference_source: "pytorch"` and `synthetic: false`.
 
-No trained checkpoint is committed to this repository (`models/*.pth` is gitignored). With `INFERENCE_BACKEND=pytorch` and no usable `MODEL_PATH`, the API starts, reports `model_loaded: false` / `inference_source: "unavailable"`, and returns **503** on ingest rather than falling back to synthetic output.
+No trained checkpoint is committed to this repository (`models/*.pth` is gitignored). With `INFERENCE_BACKEND=pytorch` and no usable `MODEL_PATH`, the API fails fast at startup to prevent silent degradation to synthetic output.
+
+### Phase 7: Production Hardening & Deployment [✓]
+
+Transformed the functional Phase 6 prototype into a robust, observable deployment.
+- **Strict Startup Validation**: Fails fast if configuration limits are impossible (e.g., max concurrent jobs > inference workers) or if the PyTorch backend is selected but the checkpoint is missing.
+- **Resource Management**: Single-worker asyncio JobQueue protected by a `threading.Lock` prevents multiple PyTorch inference jobs from colliding on the GPU. Explicit CPU `gc.collect()` prevents memory ballooning over time.
+- **API Security**: Added `X-Content-Type-Options: nosniff` headers, strict NIfTI magic-byte sniffing (`\x1f\x8b` for gzip), file size upload limits, and path traversal prevention for artifacts.
+- **Job Reliability**: Automatically detects and transitions "stale/abandoned" `RUNNING` jobs back to `FAILED` during API startup, recovering from ungraceful host crashes or container restarts.
+- **Observability**: Added structured JSON logging for inference telemetry (timings, backend, patch counts) via `_LOGGED_EXTRA_FIELDS` allowlist, plus a startup configuration log.
+- **Docker Profiles**: Hardened CPU deployment (`Dockerfile.backend`) with a non-root `appuser` and healthcheck, plus UNTESTED template architectures for `Dockerfile.backend.gpu` and `docker-compose.gpu.yml` for future NVIDIA integration.
+
+See [docs/Phase7_Production_Hardening.md](docs/Phase7_Production_Hardening.md) for full configuration and deployment details.
 
 ### Phase 6: Real PyTorch Model Integration [✓]
 
@@ -54,15 +66,15 @@ Built a clinical results presentation and quantitative measurement pipeline cons
 | Capability | Status |
 |---|---|
 | Frontend shell | Phase 1 |
-| Backend health | Phase 1 |
-| Model info | Phase 6 (`model_loaded` reflects a real loaded checkpoint; `headline_metrics` always null — none are registered) |
-| Case upload + NIfTI validation | Phase 2 |
-| Async job queue + result endpoints | Phase 3 |
+| Backend health | Phase 7 (Rich provenance: parameters, fingerprint, patch size, device) |
+| Case upload + NIfTI validation | Phase 7 (Strict sizing, content sniffing) |
+| Async job queue + result endpoints | Phase 7 (GPU locks, crash recovery, timeout safety) |
 | Mock inference (synthetic, non-clinical) | Phase 3 |
 | 2D multiplanar viewer + 3D tumor mesh | Phase 4 |
 | Measurements UI | Phase 5 (volumetric summary, regional breakdown, printable report) |
-| Real model inference | Phase 6 (`INFERENCE_BACKEND=pytorch`, trained 3D U-Net, notebook parity verified) |
+| Real model inference | Phase 6 (`INFERENCE_BACKEND=pytorch`, verified parity) |
 | Dice / HD95 evaluation | Phase 5 (evaluated against ground truth segmentation) |
+| Production Docker / Security | Phase 7 (Non-root, limits, healthchecks, strict logs) |
 
 ## Requirements
 
@@ -76,7 +88,7 @@ Copy `.env.example` to `.env` and adjust if needed. Do not commit secrets.
 
 | Variable | Purpose |
 |---|---|
-| `ENVIRONMENT` | `development` / later `production` |
+| `ENVIRONMENT` | `development` / `production` |
 | `LOG_LEVEL` | Backend log level |
 | `CORS_ORIGINS` | Comma-separated browser origins |
 | `VITE_API_URL` | Browser API origin. Empty = same-origin / Vite proxy |
@@ -85,7 +97,10 @@ Copy `.env.example` to `.env` and adjust if needed. Do not commit secrets.
 | `MODEL_VERSION` | Optional label. Empty = derived from the checkpoint's digest and epoch |
 | `INFERENCE_DEVICE` | `auto` (default) / `cpu` / `cuda` / `cuda:0` |
 | `INFERENCE_STRICT_FINGERPRINT` | `true` (default). Never relaxes `state_dict` strictness |
-| `UPLOAD_DIR` / `RESULTS_DIR` | Isolated case files (not web-served) |
+| `INFERENCE_WORKERS` | Max active processing workers (must be ≥ MAX_CONCURRENT_JOBS) |
+| `MAX_CONCURRENT_JOBS` | GPU protection concurrency limit (default 1) |
+| `JOB_TIMEOUT_SECONDS` | Run timeout before aborting job (default 600) |
+| `UPLOAD_DIR` / `RESULTS_DIR` / `TEMP_DIR` | Isolated storage directories |
 | `DATABASE_URL` | SQLite URL for case metadata |
 | `MAX_UPLOAD_SIZE_MB` | Limit for the **entire case** (sum of files), default 500 |
 
