@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, Maximize } from "lucide-react";
 
 import type { NiftiVolume, PlaneId, RegionVisibility } from "../../types/viewer";
 import {
@@ -8,6 +8,7 @@ import {
   compositeSlice,
   PLANE_AXIS,
 } from "../../lib/sliceExtraction";
+import { useCanvasZoomPan } from "../../hooks/useCanvasZoomPan";
 
 interface PlaneViewProps {
   /** Which anatomical plane this viewport shows. */
@@ -60,6 +61,16 @@ export function PlaneView({
   onActivate,
 }: PlaneViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const {
+    scale,
+    handleWheel,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    reset,
+    transformStyle,
+    getFractionsFromClick,
+  } = useCanvasZoomPan();
 
   const renderSlice = useCallback(() => {
     const canvas = canvasRef.current;
@@ -100,13 +111,18 @@ export function PlaneView({
     renderSlice();
   }, [renderSlice]);
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
     onActivate?.(plane);
-    if (!onCrosshairClick || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const xFrac = (e.clientX - rect.left) / rect.width;
-    const yFrac = (e.clientY - rect.top) / rect.height;
-    onCrosshairClick(plane, xFrac, yFrac);
+    if (!onCrosshairClick) return;
+    
+    // Ignore clicks if Shift is held (user is panning)
+    if (e.shiftKey) return;
+    
+    const { xFrac, yFrac } = getFractionsFromClick(e);
+    // Ensure clicks outside the image bounds are clamped
+    const clampedX = Math.max(0, Math.min(1, xFrac));
+    const clampedY = Math.max(0, Math.min(1, yFrac));
+    onCrosshairClick(plane, clampedX, clampedY);
   };
 
   return (
@@ -121,16 +137,38 @@ export function PlaneView({
           {PLANE_LABELS[plane]}
           {active && <span className="sr-only"> (active for keyboard navigation)</span>}
         </span>
-        <span className="font-mono text-xs text-ink-500">
-          Slice {sliceIndex + 1} / {totalSlices}
-        </span>
+        <div className="flex items-center gap-3">
+          {scale !== 1 && (
+            <button
+              onClick={reset}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-ink-500 hover:bg-slate-200 hover:text-ink-900 focus-visible:outline-accent-700"
+              aria-label={`Reset ${PLANE_LABELS[plane]} view`}
+              title="Reset Zoom/Pan"
+            >
+              <Maximize className="h-3 w-3" aria-hidden="true" />
+              <span>Reset</span>
+            </button>
+          )}
+          <span className="font-mono text-xs text-ink-500">
+            Slice {sliceIndex + 1} / {totalSlices}
+          </span>
+        </div>
       </div>
 
-      {/* Canvas area */}
-      <div className="relative flex aspect-square items-center justify-center bg-black">
+      {/* Canvas area container - handles events and clipping */}
+      <div 
+        className="relative flex aspect-square items-center justify-center bg-black overflow-hidden select-none"
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        onClick={handleContainerClick}
+        title="Scroll to zoom, Shift+Drag to pan"
+      >
         {loading && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80">
-            <Loader2 className="h-6 w-6 animate-spin text-accent-600" />
+            <Loader2 className="h-6 w-6 animate-spin text-accent-600" aria-hidden="true" />
             <p className="mt-2 text-xs text-slate-400">
               Loading {PLANE_LABELS[plane].toLowerCase()} view…
             </p>
@@ -139,18 +177,23 @@ export function PlaneView({
 
         {error && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80 p-4 text-center">
-            <AlertTriangle className="h-6 w-6 text-red-400" />
+            <AlertTriangle className="h-6 w-6 text-red-400" aria-hidden="true" />
             <p className="mt-2 text-xs text-red-300">{error}</p>
           </div>
         )}
 
-        <canvas
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          className="h-full w-full cursor-crosshair object-contain"
-          style={{ imageRendering: "pixelated" }}
-          aria-label={`${PLANE_LABELS[plane]} MRI slice ${sliceIndex + 1} of ${totalSlices}`}
-        />
+        {/* Transformed inner container */}
+        <div 
+          className="h-full w-full flex items-center justify-center origin-top-left"
+          style={transformStyle}
+        >
+          <canvas
+            ref={canvasRef}
+            className="h-full w-full cursor-crosshair object-contain pointer-events-none"
+            style={{ imageRendering: "pixelated" }}
+            aria-label={`${PLANE_LABELS[plane]} MRI slice ${sliceIndex + 1} of ${totalSlices}`}
+          />
+        </div>
       </div>
     </div>
   );
